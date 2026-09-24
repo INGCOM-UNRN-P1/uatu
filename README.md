@@ -74,10 +74,11 @@ puede usar `uvx --from "git+https://github.com/INGCOM-UNRN-P1/uatu-tools" uatu-a
    `.uatu.conf` y `templates/exam-repo/.github/workflows/uatu-audit.yml`.
    Configurar los secretos `UATU_TEACHER_PUBLIC_KEY` (Ed25519 en hex) y
    `UATU_TEACHER_PRIVATE_KEY` (PEM X25519), y una regla de protección que
-   impida force-push y borrado sobre `uatu-audit/**`. El workflow instala
-   uatu-tools con `uv tool install`; la variable opcional
-   `UATU_TOOLS_SOURCE` permite fijar una versión (p. ej.
-   `git+https://github.com/INGCOM-UNRN-P1/uatu-tools@v2.1.0`).
+   impida force-push y borrado sobre `uatu-audit/**`. El workflow clona
+   uatu-tools y lo instala con `uv tool install`; como el repositorio es
+   privado, necesita el secreto `UATU_READ_TOKEN` (ver *Acceso a los
+   repositorios privados*). La variable opcional `UATU_TOOLS_REF` fija una
+   versión (p. ej. `v2.1.0`).
 
 5. **Evaluación**: ejecutar el workflow *Evaluación Forense Uatu* (todos los
    usuarios o uno en particular) o, localmente:
@@ -102,6 +103,24 @@ Con `.uatu.conf` presente y firma válida, la extensión:
 
 Ante cortes de red o cierres abruptos, los eventos quedan en un WAL local
 y se sincronizan en la siguiente apertura.
+
+## Acceso a los repositorios privados
+
+`uatu` y `uatu-tools` son privados, y el `GITHUB_TOKEN` de un workflow solo
+puede leer su propio repositorio. Los workflows que necesitan el otro
+repositorio (CI y Release de uatu, interoperabilidad de uatu-tools y la
+evaluación forense de los repositorios de examen) lo clonan con el secreto
+`UATU_READ_TOKEN`:
+
+1. Crear un *fine-grained personal access token* (o un token de GitHub App)
+   con dueño `INGCOM-UNRN-P1`, acceso a los repositorios `uatu` y
+   `uatu-tools` y permiso **Contents: Read-only**.
+2. Guardarlo como secreto de organización `UATU_READ_TOKEN`, disponible para
+   `uatu`, `uatu-tools` y los repositorios de examen (o como secreto de cada
+   repositorio).
+
+Si los repositorios se vuelven públicos, el secreto deja de ser necesario:
+los workflows usan `github.token` cuando no está definido.
 
 ## Releases
 

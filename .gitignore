@@ -22,3 +22,4 @@ secretos/
 
 # Artefactos de release
 dist/
+.uatu-tools/

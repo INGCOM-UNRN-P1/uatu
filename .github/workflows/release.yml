@@ -42,8 +42,21 @@ jobs:
       - name: Instalar uv
         uses: astral-sh/setup-uv@v6
 
+      # uatu-tools es privado: el GITHUB_TOKEN de este repositorio no puede
+      # leerlo. UATU_READ_TOKEN (PAT fine-grained con Contents: read sobre
+      # uatu-tools) lo habilita; si el repositorio fuera público alcanza con
+      # github.token.
+      - name: Clonar uatu-tools
+        uses: actions/checkout@v7
+        with:
+          repository: INGCOM-UNRN-P1/uatu-tools
+          path: .uatu-tools
+          token: ${{ secrets.UATU_READ_TOKEN || github.token }}
+
       - name: Instalar uatu-audit (interoperabilidad)
-        run: uv tool install "git+https://github.com/INGCOM-UNRN-P1/uatu-tools"
+        run: |
+          uv tool install "$GITHUB_WORKSPACE/.uatu-tools"
+          uatu-audit --help >/dev/null
 
       - name: Verificar versión del tag
         if: startsWith(github.ref, 'refs/tags/')
