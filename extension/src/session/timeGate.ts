@@ -26,10 +26,15 @@ export interface TimerApi {
   clearInterval(handle: unknown): void;
 }
 
+/**
+ * Temporizadores de Node desreferenciados: los temporizadores de fondo de
+ * uatu nunca deben mantener vivo el proceso por sí solos (el WAL garantiza
+ * que nada se pierde si el proceso termina).
+ */
 export const nodeTimers: TimerApi = {
-  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  setTimeout: (fn, ms) => setTimeout(fn, ms).unref(),
   clearTimeout: (h) => clearTimeout(h as NodeJS.Timeout),
-  setInterval: (fn, ms) => setInterval(fn, ms),
+  setInterval: (fn, ms) => setInterval(fn, ms).unref(),
   clearInterval: (h) => clearInterval(h as NodeJS.Timeout),
 };
 
