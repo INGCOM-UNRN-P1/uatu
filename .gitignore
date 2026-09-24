@@ -1,0 +1,21 @@
+# Node / TypeScript
+node_modules/
+extension/out/
+*.vsix
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Reportes y material sensible generado localmente
+summary.md
+uatu_report.md
+*.pem
+!scripts/tests/fixtures/*.pem
+
+# Editor
+.vscode-test/
+.DS_Store
