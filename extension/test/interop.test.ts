@@ -17,7 +17,7 @@ import { auditCommand, baseManifest, makePki, signManifest, tmpDir } from './hel
 /**
  * Interoperabilidad extensión -> validador: la telemetría producida por
  * los módulos reales de la extensión se empuja a un remoto, se clona como
- * lo haría el workflow de CI y se audita con el validador uatu-audit (cli/).
+ * lo haría el workflow de CI y se audita con el validador uatu-audit (uatu-tools).
  */
 
 const audit = auditCommand();

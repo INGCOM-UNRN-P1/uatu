@@ -79,20 +79,22 @@ export function tmpDir(prefix = 'uatu-test-'): string {
 }
 
 
-const CLI_DIR = path.resolve(__dirname, '..', '..', '..', 'cli');
-const AUDIT_MODULE = path.join(CLI_DIR, 'src', 'uatu_tools', 'audit.py');
-
 /**
- * Comando para ejecutar el validador forense: `uv run --project cli uatu-audit`
- * si uv está disponible; si no, el módulo autocontenido con python3.
- * Devuelve undefined si no hay forma de ejecutarlo (la prueba se omite).
+ * Comando para ejecutar el validador forense de uatu-tools
+ * (https://github.com/INGCOM-UNRN-P1/uatu-tools):
+ *
+ *  - con UATU_TOOLS_DIR apuntando a un clon: `uv run --project $UATU_TOOLS_DIR uatu-audit`;
+ *  - si no, `uatu-audit` del PATH (instalado con `uv tool install`).
+ *
+ * Devuelve undefined si no está disponible (las pruebas que lo usan se omiten).
  */
 export function auditCommand(): { cmd: string; args: string[] } | undefined {
-  if (spawnSync('uv', ['--version']).status === 0) {
-    return { cmd: 'uv', args: ['run', '--quiet', '--project', CLI_DIR, 'uatu-audit'] };
+  const toolsDir = process.env.UATU_TOOLS_DIR;
+  if (toolsDir) {
+    return { cmd: 'uv', args: ['run', '--quiet', '--project', path.resolve(toolsDir), 'uatu-audit'] };
   }
-  if (spawnSync('python3', ['-c', 'import cryptography']).status === 0) {
-    return { cmd: 'python3', args: [AUDIT_MODULE] };
+  if (spawnSync('uatu-audit', ['--help']).status === 0) {
+    return { cmd: 'uatu-audit', args: [] };
   }
   return undefined;
 }
