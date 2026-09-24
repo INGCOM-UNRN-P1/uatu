@@ -34,16 +34,11 @@ jobs:
 
       # Las pruebas de interoperabilidad auditan la telemetría de la extensión
       # con el validador real; sin uatu-audit en el PATH se omitirían.
-      # uatu-tools es privado: el GITHUB_TOKEN de este repositorio no puede
-      # leerlo. UATU_READ_TOKEN (PAT fine-grained con Contents: read sobre
-      # uatu-tools) lo habilita; si el repositorio fuera público alcanza con
-      # github.token.
       - name: Clonar uatu-tools
         uses: actions/checkout@v7
         with:
           repository: INGCOM-UNRN-P1/uatu-tools
           path: .uatu-tools
-          token: ${{ secrets.UATU_READ_TOKEN || github.token }}
 
       - name: Instalar uatu-audit (interoperabilidad)
         run: |

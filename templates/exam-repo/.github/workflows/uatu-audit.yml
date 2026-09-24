@@ -27,17 +27,13 @@ jobs:
       - name: Instalar uv
         uses: astral-sh/setup-uv@v6
 
-      # uatu-tools es privado: el GITHUB_TOKEN del repositorio del examen no
-      # puede leerlo. UATU_READ_TOKEN (PAT fine-grained con Contents: read
-      # sobre uatu-tools, idealmente como secreto de la organización) lo
-      # habilita. UATU_TOOLS_REF permite fijar una versión (p. ej. v2.1.0).
+      # UATU_TOOLS_REF permite fijar una versión de uatu-tools (p. ej. v2.1.0).
       - name: Clonar uatu-tools
         uses: actions/checkout@v4
         with:
           repository: INGCOM-UNRN-P1/uatu-tools
           ref: ${{ vars.UATU_TOOLS_REF || 'main' }}
           path: .uatu-tools
-          token: ${{ secrets.UATU_READ_TOKEN || github.token }}
 
       - name: Instalar uatu-audit
         run: uv tool install --python 3.11 ./.uatu-tools
