@@ -1,0 +1,54 @@
+{
+  "name": "uatu",
+  "displayName": "Uatu — Auditoría Git-Native de Exámenes",
+  "description": "Proctorización transparente y auditoría criptográfica Git-native para evaluaciones prácticas de código.",
+  "version": "2.1.0",
+  "publisher": "uatu",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Education",
+    "Other"
+  ],
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "workspaceContains:.uatu.conf",
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "uatu.showStatus",
+        "title": "Uatu: Mostrar estado de la sesión"
+      },
+      {
+        "command": "uatu.startSession",
+        "title": "Uatu: Iniciar / reintentar sesión de examen"
+      },
+      {
+        "command": "uatu.flushNow",
+        "title": "Uatu: Sincronizar telemetría ahora"
+      },
+      {
+        "command": "uatu.showLog",
+        "title": "Uatu: Mostrar registro"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "clean": "rm -rf out",
+    "pretest": "npm run build",
+    "test": "node --test --test-reporter=spec \"out/test/**/*.test.js\"",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "~5.9.3"
+  }
+}
