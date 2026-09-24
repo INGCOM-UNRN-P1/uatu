@@ -1,0 +1,117 @@
+name: Release
+
+# Publica la extensión como asset de un GitHub Release al empujar un tag vX.Y.Z.
+# Para instalar la última versión en los laboratorios:
+#   https://github.com/INGCOM-UNRN-P1/uatu/releases/latest/download/uatu.vsix
+#   code --install-extension uatu.vsix
+#
+# Anclas raíz: la variable de repositorio UATU_TRUST_ANCHORS (JSON con el mismo
+# formato que extension/resources/trust-anchors.json) se embebe en el VSIX. Son
+# claves públicas, no secretos. Sin ella, el VSIX se publica sin anclas y la
+# extensión reporta "Error de integridad" en cualquier examen.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Empaquetar y publicar VSIX
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Instalar uatu-audit (interoperabilidad)
+        run: uv tool install "git+https://github.com/INGCOM-UNRN-P1/uatu-tools"
+
+      - name: Verificar versión del tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$PKG" != "$GITHUB_REF_NAME" ]; then
+            echo "::error title=Versión::El tag $GITHUB_REF_NAME no coincide con package.json ($PKG)."
+            exit 1
+          fi
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar y ejecutar suite de pruebas
+        run: npm test
+
+      - name: Embeber anclas raíz institucionales
+        env:
+          UATU_TRUST_ANCHORS: ${{ vars.UATU_TRUST_ANCHORS }}
+        run: |
+          if [ -n "$UATU_TRUST_ANCHORS" ]; then
+            printf '%s\n' "$UATU_TRUST_ANCHORS" > resources/trust-anchors.json
+          fi
+          COUNT=$(node -p "require('./out/src/config/registry').parseTrustAnchors(require('fs').readFileSync('resources/trust-anchors.json', 'utf-8')).length")
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::warning title=Anclas raíz::El VSIX no incluye anclas raíz: defina la variable UATU_TRUST_ANCHORS."
+          else
+            echo "Anclas raíz embebidas: $COUNT"
+          fi
+
+      - name: Empaquetar VSIX
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          mkdir -p ../dist
+          npm run package -- -o "../dist/uatu-${VERSION}.vsix"
+          # Alias de nombre estable para releases/latest/download/uatu.vsix
+          cp "../dist/uatu-${VERSION}.vsix" ../dist/uatu.vsix
+
+      - name: Verificar contenido del VSIX
+        working-directory: dist
+        run: |
+          unzip -l uatu.vsix | grep -q 'extension/out/src/extension.js'
+          unzip -l uatu.vsix | grep -q 'extension/resources/trust-anchors.json'
+          if unzip -l uatu.vsix | grep -q 'extension/out/test/'; then
+            echo "::error::El VSIX incluye las pruebas compiladas."
+            exit 1
+          fi
+
+      - name: Calcular sumas SHA256
+        working-directory: dist
+        run: sha256sum *.vsix > SHA256SUMS
+
+      # Con tag: publica el GitHub Release con los assets adjuntos.
+      # Sin tag (workflow_dispatch): deja los artefactos disponibles en el run.
+      - name: Publicar GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.vsix
+            dist/SHA256SUMS
+          generate_release_notes: true
+
+      - name: Subir artefactos del run (sin tag)
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uatu-vsix
+          path: |
+            dist/*.vsix
+            dist/SHA256SUMS

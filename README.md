@@ -103,6 +103,28 @@ Con `.uatu.conf` presente y firma válida, la extensión:
 Ante cortes de red o cierres abruptos, los eventos quedan en un WAL local
 y se sincronizan en la siguiente apertura.
 
+## Releases
+
+Al empujar un tag `vX.Y.Z` (igual a la versión de `extension/package.json`), el
+workflow *Release* corre las pruebas, empaqueta la extensión y publica un
+GitHub Release con `uatu-X.Y.Z.vsix`, el alias estable `uatu.vsix` y
+`SHA256SUMS`:
+
+```bash
+# Publicar
+git tag v2.1.0 && git push origin v2.1.0
+
+# Instalar la última versión en un laboratorio
+curl -LO https://github.com/INGCOM-UNRN-P1/uatu/releases/latest/download/uatu.vsix
+code --install-extension uatu.vsix
+```
+
+Las anclas raíz institucionales se embeben al empaquetar desde la variable de
+repositorio `UATU_TRUST_ANCHORS` (JSON con el formato de
+`extension/resources/trust-anchors.json`; son claves públicas). Sin ella, el
+workflow avisa y el VSIX queda sin anclas: la extensión reporta *Error de
+integridad* en cualquier examen.
+
 ## Desarrollo
 
 ```bash
