@@ -4,32 +4,50 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   extension:
     name: Extensión VS Code (TypeScript)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: extension
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: extension/package-lock.json
+
       - name: Instalar uv
         uses: astral-sh/setup-uv@v6
-      - name: Instalar uatu-audit (prueba de interoperabilidad)
-        run: uv tool install "git+https://github.com/INGCOM-UNRN-P1/uatu-tools"
-      - run: npm ci
-      - run: npm test
+
+      # Las pruebas de interoperabilidad auditan la telemetría de la extensión
+      # con el validador real; sin uatu-audit en el PATH se omitirían.
+      - name: Instalar uatu-audit (interoperabilidad)
+        run: |
+          uv tool install "git+https://github.com/INGCOM-UNRN-P1/uatu-tools"
+          uatu-audit --help >/dev/null
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar y ejecutar suite de pruebas
+        run: npm test
+
       - name: Empaquetar VSIX
         run: npm run package
+
       - uses: actions/upload-artifact@v4
         with:
           name: uatu-vsix
