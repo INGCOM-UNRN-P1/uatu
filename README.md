@@ -15,8 +15,13 @@ La especificación completa está en [`SPEC.md`](SPEC.md) y los formatos exactos
 | Ruta | Descripción |
 |---|---|
 | `extension/` | Extensión de VS Code (TypeScript): time-gating, identidad GitHub, disclaimer Fair Play, observadores, hash-chain Ed25519, cifrado ECIES, WAL, micro-lotes y sincronización Git con backoff y jitter. |
-| `cli/` | Paquete Python `uatu-tools`, instalable con `uv tool`. Expone `uatu-audit` (validador forense para CI: firmas, cadena, lotes, génesis, heurísticas y descifrado; códigos de salida 0/1/2) y `uatu-admin` (claves raíz y docentes, registro de claves y firma de `.uatu.conf`). |
 | `templates/exam-repo/` | Workflow `workflow_dispatch` de evaluación forense y manifiesto de ejemplo para el repositorio del examen. |
+
+Las herramientas Python viven en un repositorio aparte,
+[**uatu-tools**](https://github.com/INGCOM-UNRN-P1/uatu-tools): `uatu-audit`
+(validador forense para CI: firmas, cadena, lotes, génesis, heurísticas y
+descifrado; códigos de salida 0/1/2) y `uatu-admin` (claves raíz y docentes,
+registro de claves y firma de `.uatu.conf`).
 
 ```
 Repositorio del estudiante (origin)
@@ -30,11 +35,11 @@ Repositorio del estudiante (origin)
 Las herramientas se instalan con [uv](https://docs.astral.sh/uv/) (Python 3.9+):
 
 ```bash
-uv tool install ./cli        # desde un clon; o "git+https://github.com/<org>/uatu#subdirectory=cli"
+uv tool install "git+https://github.com/INGCOM-UNRN-P1/uatu-tools"
 ```
 
 Esto deja disponibles `uatu-admin` y `uatu-audit`. Sin instalar nada, se
-puede usar `uvx --from ./cli uatu-admin ...`.
+puede usar `uvx --from "git+https://github.com/INGCOM-UNRN-P1/uatu-tools" uatu-admin ...`.
 
 1. **Clave raíz institucional** (una vez):
 
@@ -68,11 +73,11 @@ puede usar `uvx --from ./cli uatu-admin ...`.
 4. **Repositorio plantilla del examen** (p. ej. GitHub Classroom): incluir
    `.uatu.conf` y `templates/exam-repo/.github/workflows/uatu-audit.yml`.
    Configurar los secretos `UATU_TEACHER_PUBLIC_KEY` (Ed25519 en hex) y
-   `UATU_TEACHER_PRIVATE_KEY` (PEM X25519), la variable
-   `UATU_TOOLS_SOURCE` con el origen del paquete (p. ej.
-   `git+https://github.com/<org>/uatu@v2.1.0#subdirectory=cli`; el workflow
-   lo instala con `uv tool install`), y una regla de protección que impida
-   force-push y borrado sobre `uatu-audit/**`.
+   `UATU_TEACHER_PRIVATE_KEY` (PEM X25519), y una regla de protección que
+   impida force-push y borrado sobre `uatu-audit/**`. El workflow instala
+   uatu-tools con `uv tool install`; la variable opcional
+   `UATU_TOOLS_SOURCE` permite fijar una versión (p. ej.
+   `git+https://github.com/INGCOM-UNRN-P1/uatu-tools@v2.1.0`).
 
 5. **Evaluación**: ejecutar el workflow *Evaluación Forense Uatu* (todos los
    usuarios o uno en particular) o, localmente:
@@ -101,12 +106,14 @@ y se sincronizan en la siguiente apertura.
 ## Desarrollo
 
 ```bash
-# Extensión: compilación y pruebas (incluye interoperabilidad con el validador)
+# Extensión: compilación y pruebas
 cd extension && npm ci && npm test
-
-# Validador y herramientas de cátedra
-uv run --project cli python -m unittest discover -s cli/tests -v
 ```
+
+Las pruebas de interoperabilidad auditan la telemetría generada por la
+extensión con `uatu-audit`: usan el comando instalado con `uv tool install`
+o, si se define `UATU_TOOLS_DIR=../uatu-tools`, un clon local vía
+`uv run --project`. Si ninguno está disponible, esas pruebas se omiten.
 
 Para probar la extensión en VS Code: abrir `extension/` y ejecutar
 *Run Extension* (F5), o instalar el VSIX generado por `npm run package`.

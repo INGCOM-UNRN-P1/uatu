@@ -29,15 +29,10 @@ jobs:
 
       - name: Instalar uatu-audit
         env:
-          # Origen del paquete uatu-tools, p. ej.
-          # git+https://github.com/<org>/uatu@v2.1.0#subdirectory=cli
-          UATU_TOOLS_SOURCE: ${{ vars.UATU_TOOLS_SOURCE }}
-        run: |
-          if [ -z "$UATU_TOOLS_SOURCE" ]; then
-            echo "::error title=Uatu::Defina la variable de repositorio UATU_TOOLS_SOURCE con el origen de uatu-tools."
-            exit 1
-          fi
-          uv tool install --python 3.11 "$UATU_TOOLS_SOURCE"
+          # Origen de uatu-tools; la variable de repositorio UATU_TOOLS_SOURCE
+          # permite fijar una versión (p. ej. ...uatu-tools@v2.1.0) o un fork.
+          UATU_TOOLS_SOURCE: ${{ vars.UATU_TOOLS_SOURCE || 'git+https://github.com/INGCOM-UNRN-P1/uatu-tools' }}
+        run: uv tool install --python 3.11 "$UATU_TOOLS_SOURCE"
 
       - name: Ejecutar Auditoría Forense
         env:

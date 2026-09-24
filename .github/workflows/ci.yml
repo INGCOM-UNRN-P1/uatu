@@ -22,8 +22,10 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: extension/package-lock.json
-      - name: Instalar uv (validador para la prueba de interoperabilidad)
+      - name: Instalar uv
         uses: astral-sh/setup-uv@v6
+      - name: Instalar uatu-audit (prueba de interoperabilidad)
+        run: uv tool install "git+https://github.com/INGCOM-UNRN-P1/uatu-tools"
       - run: npm ci
       - run: npm test
       - name: Empaquetar VSIX
@@ -32,20 +34,3 @@ jobs:
         with:
           name: uatu-vsix
           path: extension/*.vsix
-
-  validator:
-    name: Validador forense (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python: ['3.9', '3.11', '3.13']
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - name: Pruebas
-        run: uv run --project cli --python ${{ matrix.python }} python -m unittest discover -s cli/tests -v
-      - name: Instalación como uv tool
-        run: |
-          uv tool install --python ${{ matrix.python }} ./cli
-          uatu-audit --help
-          uatu-admin --help
