@@ -24,13 +24,20 @@ jobs:
         run: |
           git fetch origin '+refs/heads/uatu-audit/*:refs/remotes/origin/uatu-audit/*'
 
-      - name: Configurar Entorno Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v6
 
-      - name: Instalar Dependencias Criptográficas
-        run: pip install 'cryptography>=42'
+      - name: Instalar uatu-audit
+        env:
+          # Origen del paquete uatu-tools, p. ej.
+          # git+https://github.com/<org>/uatu@v2.1.0#subdirectory=cli
+          UATU_TOOLS_SOURCE: ${{ vars.UATU_TOOLS_SOURCE }}
+        run: |
+          if [ -z "$UATU_TOOLS_SOURCE" ]; then
+            echo "::error title=Uatu::Defina la variable de repositorio UATU_TOOLS_SOURCE con el origen de uatu-tools."
+            exit 1
+          fi
+          uv tool install --python 3.11 "$UATU_TOOLS_SOURCE"
 
       - name: Ejecutar Auditoría Forense
         env:
@@ -44,7 +51,7 @@ jobs:
           printf '%s\n' "$TEACHER_DECRYPT_KEY" > "$KEY_FILE"
 
           set +e
-          python scripts/uatu_audit.py \
+          uatu-audit \
             --repo . \
             --teacher-key "$TEACHER_VERIFY_KEY" \
             --decrypt-key "$KEY_FILE" \

@@ -1,7 +1,7 @@
 # Protocolo de telemetría uatu v2.1
 
 Este documento fija los formatos que comparten la extensión (`extension/`) y el
-validador forense (`scripts/uatu_audit.py`). Cualquier cambio acá rompe la
+validador forense (`uatu-audit`, en `cli/src/uatu_tools/audit.py`). Cualquier cambio acá rompe la
 verificación cruzada y exige subir la versión del formato.
 
 ## 1. Serialización canónica

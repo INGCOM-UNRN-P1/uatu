@@ -15,8 +15,7 @@ La especificación completa está en [`SPEC.md`](SPEC.md) y los formatos exactos
 | Ruta | Descripción |
 |---|---|
 | `extension/` | Extensión de VS Code (TypeScript): time-gating, identidad GitHub, disclaimer Fair Play, observadores, hash-chain Ed25519, cifrado ECIES, WAL, micro-lotes y sincronización Git con backoff y jitter. |
-| `scripts/uatu_audit.py` | Validador forense para CI: verifica firmas, cadena, lotes y génesis, aplica heurísticas y descifra evidencia. Códigos de salida 0/1/2. |
-| `scripts/uatu_admin.py` | Herramientas de cátedra: claves raíz y docentes, registro de claves y firma de `.uatu.conf`. |
+| `cli/` | Paquete Python `uatu-tools`, instalable con `uv tool`. Expone `uatu-audit` (validador forense para CI: firmas, cadena, lotes, génesis, heurísticas y descifrado; códigos de salida 0/1/2) y `uatu-admin` (claves raíz y docentes, registro de claves y firma de `.uatu.conf`). |
 | `templates/exam-repo/` | Workflow `workflow_dispatch` de evaluación forense y manifiesto de ejemplo para el repositorio del examen. |
 
 ```
@@ -28,12 +27,19 @@ Repositorio del estudiante (origin)
 
 ## Flujo para la cátedra
 
-Requiere Python 3.9+ y `pip install -r scripts/requirements.txt`.
+Las herramientas se instalan con [uv](https://docs.astral.sh/uv/) (Python 3.9+):
+
+```bash
+uv tool install ./cli        # desde un clon; o "git+https://github.com/<org>/uatu#subdirectory=cli"
+```
+
+Esto deja disponibles `uatu-admin` y `uatu-audit`. Sin instalar nada, se
+puede usar `uvx --from ./cli uatu-admin ...`.
 
 1. **Clave raíz institucional** (una vez):
 
    ```bash
-   python scripts/uatu_admin.py root-keygen --out secretos/ --key-id uba-root-2026
+   uatu-admin root-keygen --out secretos/ --key-id uba-root-2026
    ```
 
    Copiar el `anchor` que imprime en `extension/resources/trust-anchors.json`
@@ -42,10 +48,10 @@ Requiere Python 3.9+ y `pip install -r scripts/requirements.txt`.
 2. **Claves del docente** y **registro público**:
 
    ```bash
-   python scripts/uatu_admin.py keygen --out secretos/ --key-id prof-lead-2026
-   python scripts/uatu_admin.py registry-add --registry keys.json --key-id prof-lead-2026 \
+   uatu-admin keygen --out secretos/ --key-id prof-lead-2026
+   uatu-admin registry-add --registry keys.json --key-id prof-lead-2026 \
        --verify-key <ed25519_verify_key> --encrypt-key <x25519_encryption_key>
-   python scripts/uatu_admin.py registry-sign --registry keys.json \
+   uatu-admin registry-sign --registry keys.json \
        --root-key secretos/uba-root-2026.root.pem --root-key-id uba-root-2026
    ```
 
@@ -55,23 +61,25 @@ Requiere Python 3.9+ y `pip install -r scripts/requirements.txt`.
    ajustar la ventana y firmarlo:
 
    ```bash
-   python scripts/uatu_admin.py sign-config --config .uatu.conf \
+   uatu-admin sign-config --config .uatu.conf \
        --key secretos/prof-lead-2026.ed25519.pem --key-id prof-lead-2026
    ```
 
 4. **Repositorio plantilla del examen** (p. ej. GitHub Classroom): incluir
-   `.uatu.conf`, `scripts/uatu_audit.py` y
-   `templates/exam-repo/.github/workflows/uatu-audit.yml`. Configurar los
-   secretos `UATU_TEACHER_PUBLIC_KEY` (Ed25519 en hex) y
-   `UATU_TEACHER_PRIVATE_KEY` (PEM X25519), y una regla de protección que
-   impida force-push y borrado sobre `uatu-audit/**`.
+   `.uatu.conf` y `templates/exam-repo/.github/workflows/uatu-audit.yml`.
+   Configurar los secretos `UATU_TEACHER_PUBLIC_KEY` (Ed25519 en hex) y
+   `UATU_TEACHER_PRIVATE_KEY` (PEM X25519), la variable
+   `UATU_TOOLS_SOURCE` con el origen del paquete (p. ej.
+   `git+https://github.com/<org>/uatu@v2.1.0#subdirectory=cli`; el workflow
+   lo instala con `uv tool install`), y una regla de protección que impida
+   force-push y borrado sobre `uatu-audit/**`.
 
 5. **Evaluación**: ejecutar el workflow *Evaluación Forense Uatu* (todos los
    usuarios o uno en particular) o, localmente:
 
    ```bash
    git fetch origin '+refs/heads/uatu-audit/*:refs/remotes/origin/uatu-audit/*'
-   python scripts/uatu_audit.py --repo . --teacher-key <hex> \
+   uatu-audit --repo . --teacher-key <hex> \
        --decrypt-key secretos/prof-lead-2026.x25519.pem --md-out reporte.md
    ```
 
@@ -97,7 +105,7 @@ y se sincronizan en la siguiente apertura.
 cd extension && npm ci && npm test
 
 # Validador y herramientas de cátedra
-python -m unittest discover -s scripts/tests -v
+uv run --project cli python -m unittest discover -s cli/tests -v
 ```
 
 Para probar la extensión en VS Code: abrir `extension/` y ejecutar

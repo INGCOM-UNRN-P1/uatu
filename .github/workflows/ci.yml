@@ -22,11 +22,8 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: extension/package-lock.json
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Dependencias del validador (prueba de interoperabilidad)
-        run: pip install -r ../scripts/requirements.txt
+      - name: Instalar uv (validador para la prueba de interoperabilidad)
+        uses: astral-sh/setup-uv@v6
       - run: npm ci
       - run: npm test
       - name: Empaquetar VSIX
@@ -44,8 +41,11 @@ jobs:
         python: ['3.9', '3.11', '3.13']
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - run: pip install -r scripts/requirements.txt
-      - run: python -m unittest discover -s scripts/tests -v
+      - uses: astral-sh/setup-uv@v6
+      - name: Pruebas
+        run: uv run --project cli --python ${{ matrix.python }} python -m unittest discover -s cli/tests -v
+      - name: Instalación como uv tool
+        run: |
+          uv tool install --python ${{ matrix.python }} ./cli
+          uatu-audit --help
+          uatu-admin --help
