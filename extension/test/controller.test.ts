@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { makeRepo, sh } from './gitHelpers';
-import { baseManifest, makePki, signManifest, tmpDir } from './helpers';
+import { auditCommand, baseManifest, makePki, signManifest, tmpDir } from './helpers';
 import { events, fileUri, installVscodeMock, makeFolder, makeSecrets, state } from './vscodeMock';
 
 installVscodeMock();
@@ -17,8 +17,7 @@ const { UatuStatusBar } = require('../src/vscode/statusBar') as typeof import('.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { SecretKeyVault } = require('../src/vscode/secretVault') as typeof import('../src/vscode/secretVault');
 
-const AUDIT_SCRIPT = path.resolve(__dirname, '..', '..', '..', 'scripts', 'uatu_audit.py');
-const pythonReady = spawnSync('python3', ['-c', 'import cryptography'], { encoding: 'utf-8' }).status === 0;
+const audit = auditCommand();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -140,13 +139,13 @@ test('flujo ACTIVO completo: consentimiento, pegado, foco, extensión prohibida 
   assert.equal(evs[2].data.target_file, 'src/fib.c');
   assert.equal(sh(exam.repo, 'status', '--porcelain'), '', 'el working tree del estudiante queda intacto');
 
-  if (pythonReady) {
+  if (audit) {
     const pem = path.join(tmpDir(), 't.pem');
     fs.writeFileSync(pem, exam.pki.teacherDecrypt.export({ format: 'pem', type: 'pkcs8' }) as string);
     const json = path.join(tmpDir(), 'r.json');
     const run = spawnSync(
-      'python3',
-      [AUDIT_SCRIPT, '--repo', ci, '--teacher-key', exam.pki.teacherVerifyHex, '--decrypt-key', pem, '--md-out', path.join(tmpDir(), 'r.md'), '--json-out', json],
+      audit.cmd,
+      [...audit.args, '--repo', ci, '--teacher-key', exam.pki.teacherVerifyHex, '--decrypt-key', pem, '--md-out', path.join(tmpDir(), 'r.md'), '--json-out', json],
       { encoding: 'utf-8' }
     );
     const report = JSON.parse(fs.readFileSync(json, 'utf-8'));

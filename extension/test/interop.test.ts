@@ -12,19 +12,17 @@ import { buildInsertionRecord } from '../src/monitors/insertionEvent';
 import { AuditSession } from '../src/session/auditSession';
 import { SessionStore } from '../src/session/sessionStore';
 import { makeRepo, sh } from './gitHelpers';
-import { baseManifest, makePki, signManifest, tmpDir } from './helpers';
+import { auditCommand, baseManifest, makePki, signManifest, tmpDir } from './helpers';
 
 /**
  * Interoperabilidad extensión -> validador: la telemetría producida por
  * los módulos reales de la extensión se empuja a un remoto, se clona como
- * lo haría el workflow de CI y se audita con scripts/uatu_audit.py.
+ * lo haría el workflow de CI y se audita con el validador uatu-audit (cli/).
  */
 
-const AUDIT_SCRIPT = path.resolve(__dirname, '..', '..', '..', 'scripts', 'uatu_audit.py');
-const pythonReady =
-  spawnSync('python3', ['-c', 'import cryptography'], { encoding: 'utf-8' }).status === 0 && fs.existsSync(AUDIT_SCRIPT);
+const audit = auditCommand();
 
-test('la telemetría de la extensión es verificable y descifrable por uatu_audit.py', { skip: !pythonReady }, async () => {
+test('la telemetría de la extensión es verificable y descifrable por uatu-audit', { skip: !audit }, async () => {
   const pki = makePki();
   const { repo, remote } = makeRepo();
 
@@ -129,8 +127,8 @@ test('la telemetría de la extensión es verificable y descifrable por uatu_audi
   const md = path.join(out, 'report.md');
   const json = path.join(out, 'report.json');
   const run = spawnSync(
-    'python3',
-    [AUDIT_SCRIPT, '--repo', ci, '--teacher-key', pki.teacherVerifyHex, '--decrypt-key', pem, '--md-out', md, '--json-out', json],
+    audit!.cmd,
+    [...audit!.args, '--repo', ci, '--teacher-key', pki.teacherVerifyHex, '--decrypt-key', pem, '--md-out', md, '--json-out', json],
     { encoding: 'utf-8' }
   );
   const report = JSON.parse(fs.readFileSync(json, 'utf-8'));
@@ -158,7 +156,7 @@ test('la telemetría de la extensión es verificable y descifrable por uatu_audi
     ref, indexFile: path.join(out, 'idx'), pathInTree: file, content: JSON.stringify(batch),
     message: 'retoque', identity: { name: user, email: 'x@example.com' },
   });
-  const rerun = spawnSync('python3', [AUDIT_SCRIPT, '--repo', ci, '--teacher-key', pki.teacherVerifyHex, '--md-out', md], {
+  const rerun = spawnSync(audit!.cmd, [...audit!.args, '--repo', ci, '--teacher-key', pki.teacherVerifyHex, '--md-out', md], {
     encoding: 'utf-8',
   });
   assert.equal(rerun.status, 1);

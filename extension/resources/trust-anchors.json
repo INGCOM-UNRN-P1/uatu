@@ -1,4 +1,4 @@
 {
-  "comment": "Claves públicas Ed25519 raíz de la institución. Generar con 'python scripts/uatu_admin.py root-keygen' y reemplazar esta lista antes de empaquetar la extensión.",
+  "comment": "Claves públicas Ed25519 raíz de la institución. Generar con 'uatu-admin root-keygen' y reemplazar esta lista antes de empaquetar la extensión.",
   "anchors": []
 }

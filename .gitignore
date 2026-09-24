@@ -14,7 +14,7 @@ __pycache__/
 summary.md
 uatu_report.md
 *.pem
-!scripts/tests/fixtures/*.pem
+secretos/
 
 # Editor
 .vscode-test/

@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -75,4 +76,23 @@ export function signManifest(manifest: Record<string, unknown>, key: crypto.KeyO
 
 export function tmpDir(prefix = 'uatu-test-'): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+
+const CLI_DIR = path.resolve(__dirname, '..', '..', '..', 'cli');
+const AUDIT_MODULE = path.join(CLI_DIR, 'src', 'uatu_tools', 'audit.py');
+
+/**
+ * Comando para ejecutar el validador forense: `uv run --project cli uatu-audit`
+ * si uv está disponible; si no, el módulo autocontenido con python3.
+ * Devuelve undefined si no hay forma de ejecutarlo (la prueba se omite).
+ */
+export function auditCommand(): { cmd: string; args: string[] } | undefined {
+  if (spawnSync('uv', ['--version']).status === 0) {
+    return { cmd: 'uv', args: ['run', '--quiet', '--project', CLI_DIR, 'uatu-audit'] };
+  }
+  if (spawnSync('python3', ['-c', 'import cryptography']).status === 0) {
+    return { cmd: 'python3', args: [AUDIT_MODULE] };
+  }
+  return undefined;
 }

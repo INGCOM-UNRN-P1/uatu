@@ -11,7 +11,7 @@
  *
  * La salida es byte a byte idéntica a
  * `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
- * en Python, que es la forma que utiliza el validador `uatu_audit.py`.
+ * en Python, que es la forma que utiliza el validador `uatu-audit` (cli/).
  */
 
 export type CanonicalValue =
