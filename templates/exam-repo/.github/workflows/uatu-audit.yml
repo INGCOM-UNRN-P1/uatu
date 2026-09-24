@@ -1,0 +1,72 @@
+name: "Evaluación Forense Uatu"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_user:
+        description: 'Usuario de GitHub a auditar (vacío para auditar todos)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  audit-session:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Descargar ramas de auditoría
+        run: |
+          git fetch origin '+refs/heads/uatu-audit/*:refs/remotes/origin/uatu-audit/*'
+
+      - name: Configurar Entorno Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar Dependencias Criptográficas
+        run: pip install 'cryptography>=42'
+
+      - name: Ejecutar Auditoría Forense
+        env:
+          TEACHER_VERIFY_KEY: ${{ secrets.UATU_TEACHER_PUBLIC_KEY }}
+          TEACHER_DECRYPT_KEY: ${{ secrets.UATU_TEACHER_PRIVATE_KEY }}
+          TARGET_USER: ${{ inputs.target_user }}
+        run: |
+          umask 077
+          KEY_FILE="$(mktemp)"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s\n' "$TEACHER_DECRYPT_KEY" > "$KEY_FILE"
+
+          set +e
+          python scripts/uatu_audit.py \
+            --repo . \
+            --teacher-key "$TEACHER_VERIFY_KEY" \
+            --decrypt-key "$KEY_FILE" \
+            --user "$TARGET_USER" \
+            --md-out uatu_report.md \
+            --json-out uatu_report.json
+          STATUS=$?
+          set -e
+
+          cat uatu_report.md >> "$GITHUB_STEP_SUMMARY"
+          case "$STATUS" in
+            0) echo "Auditoría limpia." ;;
+            2) echo "::warning title=Uatu::Cadena íntegra con alertas heurísticas (ver reporte)." ;;
+            *) echo "::error title=Uatu::Falla de integridad criptográfica (código $STATUS)."; exit "$STATUS" ;;
+          esac
+
+      - name: Publicar Artefacto de Reporte
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-uatu
+          path: |
+            uatu_report.md
+            uatu_report.json
+          if-no-files-found: ignore

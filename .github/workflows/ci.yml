@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  extension:
+    name: Extensión VS Code (TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependencias del validador (prueba de interoperabilidad)
+        run: pip install -r ../scripts/requirements.txt
+      - run: npm ci
+      - run: npm test
+      - name: Empaquetar VSIX
+        run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uatu-vsix
+          path: extension/*.vsix
+
+  validator:
+    name: Validador forense (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.9', '3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r scripts/requirements.txt
+      - run: python -m unittest discover -s scripts/tests -v

@@ -1,0 +1,39 @@
+{
+  "version": "2.1",
+  "exam_id": "eval-sistemas-distribuidos-2026",
+  "session": {
+    "start_utc": "2026-09-24T13:00:00Z",
+    "deadline_utc": "2026-09-24T16:00:00Z",
+    "batch_interval_seconds": 30,
+    "batch_max_events": 20,
+    "sync_max_backoff_seconds": 60,
+    "heartbeat_interval_seconds": 120
+  },
+  "auth": {
+    "public_key_registry_url": "https://catedras.exactas.uba.ar/so/keys/2026-c2.json",
+    "require_github_auth": true
+  },
+  "monitoring": {
+    "clipboard": {
+      "enabled": true,
+      "character_threshold": 15,
+      "encrypt_content": true,
+      "hash_algorithm": "sha256"
+    },
+    "window_focus": true,
+    "disallowed_extensions": [
+      "github.copilot",
+      "github.copilot-chat",
+      "continue.continue"
+    ]
+  },
+  "crypto": {
+    "teacher_key_id": "prof-lead-2026",
+    "signature": ""
+  },
+  "git": {
+    "telemetry_branch_prefix": "uatu-audit",
+    "remote_name": "origin",
+    "auto_push": true
+  }
+}
