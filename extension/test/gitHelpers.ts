@@ -25,7 +25,7 @@ export function makeRepo(): { repo: string; remote: string } {
   const remote = path.join(base, 'remote.git');
   const repo = path.join(base, 'work');
   fs.mkdirSync(repo);
-  sh(base, 'init', '-q', '--bare', remote);
+  sh(base, 'init', '-q', '--bare', '-b', 'main', remote);
   sh(repo, 'init', '-q', '-b', 'main');
   fs.writeFileSync(path.join(repo, 'main.c'), 'int main(void) { return 0; }\n');
   sh(repo, 'add', 'main.c');
