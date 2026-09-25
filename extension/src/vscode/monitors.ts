@@ -42,6 +42,15 @@ export function describeTarget(uri: vscode.Uri, repoRoot: string): string | unde
   return normalized;
 }
 
+/** Estado observable de los monitores para el panel lateral. */
+export interface MonitorSnapshot {
+  focused: boolean;
+  unfocusedTotalMs: number;
+  lastHeartbeatMs?: number;
+  extensions: { id: string; state: ExtensionState }[];
+  insertions: number;
+}
+
 export class EditorMonitors implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly focus: FocusTracker;
@@ -50,6 +59,8 @@ export class EditorMonitors implements vscode.Disposable {
   private heartbeat: NodeJS.Timeout | undefined;
   private lastSaveFlushMs = 0;
   private readonly inFlight = new Set<Promise<void>>();
+  private lastHeartbeatMs: number | undefined;
+  private insertions = 0;
 
   constructor(private readonly ctx: MonitorContext) {
     const now = ctx.clock.now();
@@ -132,6 +143,7 @@ export class EditorMonitors implements vscode.Disposable {
         this.ctx.teacherEncryptionKey
       );
       this.ctx.record(rec.type, rec.data);
+      this.insertions++;
       const what = rec.type === 'clipboard_paste' ? 'Portapapeles registrado' : 'Inserción externa registrada';
       const how = this.ctx.manifest.monitoring.clipboard.encrypt_content ? ' y cifrado' : '';
       vscode.window.setStatusBarMessage(`[Uatu] ${what}${how} (Hash: ${rec.plaintextSha256.slice(0, 4)}...)`, 4000);
@@ -174,11 +186,23 @@ export class EditorMonitors implements vscode.Disposable {
     if (this.ctx.manifest.monitoring.disallowed_extensions.length > 0) {
       this.checkExtensions();
     }
+    this.lastHeartbeatMs = now;
     this.ctx.record('heartbeat', {
       uptime_seconds: Math.floor((now - this.ctx.sessionStartedMs) / 1000),
       window_focused: vscode.window.state.focused,
       unfocused_total_ms: this.focus.totalUnfocused(now),
     });
+  }
+
+  public snapshot(): MonitorSnapshot {
+    const now = this.ctx.clock.now();
+    return {
+      focused: this.focus.isFocused,
+      unfocusedTotalMs: this.focus.totalUnfocused(now),
+      lastHeartbeatMs: this.lastHeartbeatMs,
+      extensions: [...this.extensionState.entries()].map(([id, state]) => ({ id, state })),
+      insertions: this.insertions,
+    };
   }
 
   /** Desmonta los observadores y espera las inserciones en curso de registro. */

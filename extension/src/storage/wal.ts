@@ -46,6 +46,8 @@ export class WalError extends Error {}
 export class WriteAheadLog {
   private fd: number | undefined;
   private pending: AuditEvent[] = [];
+  /** Todos los eventos de la sesión, en orden (alimentan la bitácora de la interfaz). */
+  private readonly all: AuditEvent[] = [];
   private lastEvent: AuditEvent | undefined;
   private eventCount = 0;
   private readonly batchList: BatchRecord[] = [];
@@ -111,6 +113,7 @@ export class WriteAheadLog {
     switch (record.type) {
       case 'event':
         this.pending.push(record.event);
+        this.all.push(record.event);
         this.lastEvent = record.event;
         this.eventCount++;
         break;
@@ -183,6 +186,11 @@ export class WriteAheadLog {
   /** Eventos en estado RECORDED (aún no incluidos en un lote). */
   public pendingEvents(): AuditEvent[] {
     return [...this.pending];
+  }
+
+  /** Copia de todos los eventos registrados en la sesión. */
+  public allEvents(): AuditEvent[] {
+    return [...this.all];
   }
 
   public get batches(): BatchRecord[] {

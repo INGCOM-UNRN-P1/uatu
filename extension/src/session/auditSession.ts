@@ -1,4 +1,5 @@
 import { AuditEvent, EventData, EventType } from '../audit/events';
+import { BatchRecord, TransactionState } from '../storage/wal';
 import { HashChain } from '../audit/hashChain';
 import { BatchEngine } from '../batching/batchEngine';
 import { Clock } from '../core/time';
@@ -110,6 +111,23 @@ export class AuditSession {
 
   private emitStats(): void {
     this.opts.onStats?.(this.stats);
+  }
+
+  /** Eventos de la sesión (para la bitácora). */
+  public events(): AuditEvent[] {
+    return this.wal.allEvents();
+  }
+
+  public eventState(sequenceId: number): TransactionState | undefined {
+    return this.wal.eventState(sequenceId);
+  }
+
+  public batches(): BatchRecord[] {
+    return this.wal.batches;
+  }
+
+  public get sessionDir(): string {
+    return this.opts.store.dir(this.opts.meta.session_uuid);
   }
 
   public get canRecord(): boolean {
