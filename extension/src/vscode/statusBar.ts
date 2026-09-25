@@ -21,7 +21,7 @@ export class UatuStatusBar implements vscode.Disposable {
   constructor() {
     this.item = vscode.window.createStatusBarItem('uatu.status', vscode.StatusBarAlignment.Left, 1000);
     this.item.name = 'Uatu';
-    this.item.command = 'uatu.showStatus';
+    this.item.command = 'uatu.focusPanel';
     this.render();
     this.item.show();
   }

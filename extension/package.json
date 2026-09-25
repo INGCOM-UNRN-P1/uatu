@@ -28,13 +28,135 @@
       },
       {
         "command": "uatu.flushNow",
-        "title": "Uatu: Sincronizar telemetría ahora"
+        "title": "Uatu: Sincronizar telemetría ahora",
+        "icon": "$(cloud-upload)"
       },
       {
         "command": "uatu.showLog",
         "title": "Uatu: Mostrar registro"
+      },
+      {
+        "command": "uatu.focusPanel",
+        "title": "Uatu: Abrir panel de monitoreo"
+      },
+      {
+        "command": "uatu.refreshViews",
+        "title": "Actualizar",
+        "category": "Uatu",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "uatu.changeLogGrouping",
+        "title": "Agrupar bitácora…",
+        "category": "Uatu",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "uatu.showEventDetail",
+        "title": "Ver detalle del evento",
+        "category": "Uatu",
+        "icon": "$(json)"
+      },
+      {
+        "command": "uatu.copyEventHash",
+        "title": "Copiar hash del evento",
+        "category": "Uatu",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "uatu.openSessionFolder",
+        "title": "Abrir carpeta local de la sesión",
+        "category": "Uatu",
+        "icon": "$(folder-opened)"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "uatu",
+          "title": "Uatu",
+          "icon": "resources/uatu.svg"
+        }
+      ]
+    },
+    "views": {
+      "uatu": [
+        {
+          "id": "uatu.statusView",
+          "name": "Monitoreo",
+          "icon": "resources/uatu.svg",
+          "contextualTitle": "Uatu"
+        },
+        {
+          "id": "uatu.logView",
+          "name": "Bitácora",
+          "icon": "resources/uatu.svg",
+          "contextualTitle": "Uatu"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "uatu.logView",
+        "contents": "Todavía no hay eventos registrados en esta ventana.\nLa bitácora se completa cuando comienza una sesión de examen: inserciones masivas, foco de la ventana, extensiones no permitidas y latidos, cada uno firmado y encadenado.\n[Abrir panel de monitoreo](command:uatu.focusPanel)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "uatu.flushNow",
+          "when": "view == uatu.statusView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "uatu.refreshViews",
+          "when": "view == uatu.statusView || view == uatu.logView",
+          "group": "navigation@9"
+        },
+        {
+          "command": "uatu.changeLogGrouping",
+          "when": "view == uatu.logView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "uatu.openSessionFolder",
+          "when": "view == uatu.statusView",
+          "group": "1_sesion"
+        },
+        {
+          "command": "uatu.showLog",
+          "when": "view == uatu.statusView",
+          "group": "1_sesion"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "uatu.showEventDetail",
+          "when": "view == uatu.logView && viewItem == uatu.event",
+          "group": "inline"
+        },
+        {
+          "command": "uatu.showEventDetail",
+          "when": "view == uatu.logView && viewItem == uatu.event",
+          "group": "1_evento@1"
+        },
+        {
+          "command": "uatu.copyEventHash",
+          "when": "view == uatu.logView && viewItem == uatu.event",
+          "group": "1_evento@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "uatu.showEventDetail",
+          "when": "false"
+        },
+        {
+          "command": "uatu.copyEventHash",
+          "when": "false"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build",

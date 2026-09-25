@@ -213,3 +213,68 @@ test('sin .uatu.conf la extensión permanece inactiva', async () => {
   assert.equal(state.statusTexts.at(-1), '$(shield) Uatu: Inactivo');
   controller.dispose();
 });
+
+test('panel lateral: monitoreo y bitácora reflejan la sesión y sus comandos funcionan', async () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { UatuSidebar } = require('../src/vscode/sidebar') as typeof import('../src/vscode/sidebar');
+  const exam = setupExam(-60_000, 3_600_000);
+  resetState(exam.repo);
+  state.extensions = [{ id: 'GitHub.copilot', isActive: false, packageJSON: { version: '0.9' } }];
+  state.openedDocuments = [];
+  state.clipboardWrites = [];
+  const { controller, statusBar } = makeController(exam.pki.anchors);
+  const sidebar = new UatuSidebar(controller);
+  try {
+  await controller.initialize();
+  await waitFor(() => statusBar.current.kind === 'active');
+
+  const text = 'int suma(int a, int b)\n{\n    return a + b;\n}\n';
+  state.clipboard = text;
+  events.changeText.fire({
+    document: { uri: fileUri(path.join(exam.repo, 'src', 'suma.c')) },
+    contentChanges: [{ text, range: { start: { line: 0, character: 0 } } }],
+  });
+  await waitFor(() => state.statusMessages.length > 0);
+  sidebar.refresh();
+
+  const labels = sidebar.statusNodes.map((n) => n.label);
+  assert.deepEqual(labels.slice(0, 2), ['Sesión activa', 'Examen']);
+  assert.match(sidebar.statusNodes[0].description!, /^cierra en /);
+  const monitors = sidebar.statusNodes.find((n) => n.id === 'st-monitors')!;
+  assert.equal(monitors.description, 'activos');
+  assert.equal(monitors.children!.find((c) => c.id === 'st-mon-ext')!.description, '1 en la lista · 1 detectada(s)');
+
+  const logView = state.treeViews.get('uatu.logView')!;
+  assert.equal(logView.badge?.value, 2, 'extensión prohibida + pegado');
+  const allEvents = sidebar.logNodes.flatMap((n) => n.children ?? []);
+  const paste = allEvents.find((n) => n.label.endsWith('Pegado del portapapeles'))!;
+  assert.equal(paste.description, `src/suma.c · ${text.length} car.`);
+
+  // TreeItems generados por el proveedor real.
+  const item = logView.provider.getTreeItem(paste);
+  assert.equal(item.contextValue, 'uatu.event');
+  assert.equal((item.iconPath as { id: string }).id, 'clippy');
+
+  const cmds = (await import('./vscodeMock')).vscodeMock.commands;
+  await cmds.executeCommand('uatu.showEventDetail', paste);
+  assert.equal(state.openedDocuments.length, 1);
+  assert.equal(JSON.parse(state.openedDocuments[0].content).event_type, 'clipboard_paste');
+  assert.doesNotMatch(state.openedDocuments[0].content, /return a \+ b/, 'el detalle no expone el texto en claro');
+  await cmds.executeCommand('uatu.copyEventHash', paste);
+  assert.match(state.clipboardWrites[0], /^[0-9a-f]{64}$/);
+
+  state.quickPickChoice = 2; // cronológica
+  await cmds.executeCommand('uatu.changeLogGrouping');
+  assert.equal(sidebar.logGrouping, 'time');
+  assert.match(sidebar.logNodes[0].label, /Pegado del portapapeles|Extensión no permitida/);
+
+  await controller.shutdown();
+  sidebar.refresh();
+  assert.equal(sidebar.statusNodes[0].label, 'Sesión activa', 'el cierre por shutdown no cambia la fase mostrada');
+  assert.match(sidebar.statusNodes.find((n) => n.id === 'st-session')!.description!, /cerrada \(shutdown\)/);
+  } finally {
+    await controller.shutdown();
+    sidebar.dispose();
+    controller.dispose();
+  }
+});

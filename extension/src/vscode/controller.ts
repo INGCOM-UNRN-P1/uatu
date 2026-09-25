@@ -19,7 +19,8 @@ import { KeyVault, SessionMetadata, SessionStore } from '../session/sessionStore
 import { TimeGate, TimePhase, TrustedClock } from '../session/timeGate';
 import { ConsentDeclined, resolveGithubUser, showFairPlayDisclaimer } from './consent';
 import { EditorMonitors } from './monitors';
-import { UatuStatusBar } from './statusBar';
+import { StatusView, UatuStatusBar } from './statusBar';
+import { UatuSnapshot } from '../views/model';
 
 /**
  * Orquestador de la máquina de estados de activación (Sección 3.1):
@@ -64,6 +65,11 @@ export class UatuController implements vscode.Disposable {
   private gate: TimeGate | undefined;
   private active: ActiveSession | undefined;
   private readonly draining = new Map<string, AuditSession>();
+  /** Última sesión abierta en esta ventana: su bitácora sigue visible al concluir. */
+  private lastSession: AuditSession | undefined;
+  private readonly changeEmitter = new vscode.EventEmitter<void>();
+  /** Se dispara ante cualquier cambio visible (estado, eventos, sincronización). */
+  public readonly onDidChange = this.changeEmitter.event;
   private drainTimer: NodeJS.Timeout | undefined;
   private retryTimer: NodeJS.Timeout | undefined;
   private starting = false;
@@ -74,6 +80,74 @@ export class UatuController implements vscode.Disposable {
     const storage = deps.context.globalStorageUri.fsPath;
     this.store = new SessionStore(storage);
     this.resolver = new RegistryResolver(deps.anchors, `${storage}/registry-cache`);
+  }
+
+  private setView(view: StatusView): void {
+    this.deps.statusBar.set(view);
+    this.changeEmitter.fire();
+  }
+
+  /** Instantánea del estado para el panel lateral. */
+  public snapshot(): UatuSnapshot {
+    const view = this.deps.statusBar.current;
+    const exam = this.exam;
+    const session = this.active?.session ?? this.lastSession;
+    const snap: UatuSnapshot = {
+      nowMs: this.clock.now(),
+      phase: view.kind,
+      message: view.kind === 'error' ? view.message : undefined,
+      clock: { source: this.clock.origin, offsetMs: this.clockObservedOffsetMs },
+      events: [],
+      batches: [],
+    };
+    if (exam) {
+      const m = exam.parsed.manifest;
+      snap.exam = {
+        examId: m.exam_id,
+        startMs: exam.parsed.startMs,
+        deadlineMs: exam.parsed.deadlineMs,
+        teacherKeyId: m.crypto.teacher_key_id,
+        registryUrl: m.auth.public_key_registry_url,
+        manifestPath: exam.manifestPath,
+        clipboard: {
+          enabled: m.monitoring.clipboard.enabled,
+          threshold: m.monitoring.clipboard.character_threshold,
+          encrypt: m.monitoring.clipboard.encrypt_content,
+        },
+        windowFocus: m.monitoring.window_focus,
+        disallowedExtensions: m.monitoring.disallowed_extensions,
+        heartbeatSeconds: m.session.heartbeat_interval_seconds,
+        batchIntervalSeconds: m.session.batch_interval_seconds,
+        batchMaxEvents: m.session.batch_max_events,
+        autoPush: m.git.auto_push,
+        remote: m.git.remote_name,
+        branchPrefix: m.git.telemetry_branch_prefix,
+      };
+    }
+    if (session) {
+      const meta = session.metadata;
+      snap.session = {
+        uuid: meta.session_uuid,
+        user: meta.github_user,
+        ref: meta.ref,
+        studentPublicKey: meta.student_public_key,
+        genesisHash: meta.genesis_hash,
+        createdMs: Date.parse(meta.created_at_utc),
+        directory: session.sessionDir,
+        closedReason: session.closedReason,
+        stats: session.stats,
+      };
+      const batches = session.batches();
+      snap.batches = batches;
+      snap.events = session.events().map((event) => {
+        const batch = batches.find((b) => event.sequence_id >= b.first_seq && event.sequence_id <= b.last_seq);
+        return { event, state: session.eventState(event.sequence_id), batch: batch?.batch_sequence_id };
+      });
+    }
+    if (this.active) {
+      snap.monitors = this.active.monitors.snapshot();
+    }
+    return snap;
   }
 
   private log(message: string): void {
@@ -131,7 +205,7 @@ export class UatuController implements vscode.Disposable {
 
   private fail(message: string, notify = true): void {
     this.log(`ERROR: ${message}`);
-    this.deps.statusBar.set({ kind: 'error', message });
+    this.setView({ kind: 'error', message });
     if (notify) {
       void vscode.window.showErrorMessage(`Uatu: ${message}`);
     }
@@ -150,7 +224,7 @@ export class UatuController implements vscode.Disposable {
     if (!found) {
       this.stopGate();
       this.exam = undefined;
-      this.deps.statusBar.set({ kind: 'idle' });
+      this.setView({ kind: 'idle' });
       return;
     }
 
@@ -229,7 +303,7 @@ export class UatuController implements vscode.Disposable {
     const examId = exam.parsed.manifest.exam_id;
     switch (phase) {
       case 'STANDBY':
-        this.deps.statusBar.set({ kind: 'standby', startMs: exam.parsed.startMs, examId });
+        this.setView({ kind: 'standby', startMs: exam.parsed.startMs, examId });
         break;
       case 'ACTIVE':
         void this.startSession();
@@ -256,7 +330,7 @@ export class UatuController implements vscode.Disposable {
       } catch (e) {
         if (e instanceof ConsentDeclined) {
           this.log(e.message);
-          this.deps.statusBar.set({ kind: 'declined', examId: m.exam_id });
+          this.setView({ kind: 'declined', examId: m.exam_id });
           return;
         }
         throw e;
@@ -272,7 +346,7 @@ export class UatuController implements vscode.Disposable {
       });
       if (!accepted) {
         this.log('El estudiante no aceptó los términos del examen.');
-        this.deps.statusBar.set({ kind: 'declined', examId: m.exam_id });
+        this.setView({ kind: 'declined', examId: m.exam_id });
         return;
       }
       if (this.gate?.current !== 'ACTIVE' || this.exam !== exam) {
@@ -332,7 +406,10 @@ export class UatuController implements vscode.Disposable {
       batchMaxEvents: m.session.batch_max_events,
       clock: this.clock,
       log: (msg) => this.log(msg),
-      onStats: (stats) => this.deps.statusBar.updateStats(stats),
+      onStats: (stats) => {
+        this.deps.statusBar.updateStats(stats);
+        this.changeEmitter.fire();
+      },
     });
     const startedMs = this.clock.now();
     session.record('session_start', {
@@ -369,7 +446,8 @@ export class UatuController implements vscode.Disposable {
       log: (msg) => this.log(msg),
     });
     this.active = { session, monitors, user, configSha256: exam.parsed.sha256 };
-    this.deps.statusBar.set({ kind: 'active', user, examId: m.exam_id, deadlineMs: exam.parsed.deadlineMs, stats: session.stats });
+    this.lastSession = session;
+    this.setView({ kind: 'active', user, examId: m.exam_id, deadlineMs: exam.parsed.deadlineMs, stats: session.stats });
     this.log(`Sesión ${sessionUuid} iniciada para @${user} en ${meta.ref}.`);
   }
 
@@ -393,7 +471,7 @@ export class UatuController implements vscode.Disposable {
     if (session) {
       this.drain(session);
     }
-    this.deps.statusBar.set({ kind: 'concluded', examId, pendingBatches: session?.stats.sync.pendingBatches ?? 0 });
+    this.setView({ kind: 'concluded', examId, pendingBatches: session?.stats.sync.pendingBatches ?? 0 });
     if (wasActive || session) {
       void vscode.window.showInformationMessage(
         `Uatu: el examen ${examId} concluyó a las ${formatHourMinuteUtc(new Date(exam?.parsed.deadlineMs ?? 0))} UTC. ` +
@@ -500,7 +578,7 @@ export class UatuController implements vscode.Disposable {
         const view = this.deps.statusBar.current;
         if (view.kind === 'concluded') {
           const pending = [...this.draining.values()].reduce((acc, s) => acc + s.stats.sync.pendingBatches, 0);
-          this.deps.statusBar.set({ ...view, pendingBatches: pending });
+          this.setView({ ...view, pendingBatches: pending });
         }
         if (this.draining.size === 0 && this.drainTimer) {
           clearInterval(this.drainTimer);
@@ -578,6 +656,7 @@ export class UatuController implements vscode.Disposable {
   }
 
   public dispose(): void {
+    this.changeEmitter.dispose();
     this.stopGate();
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);

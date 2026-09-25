@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { parseTrustAnchors, TrustAnchor } from './config/registry';
 import { UatuController } from './vscode/controller';
 import { SecretKeyVault } from './vscode/secretVault';
+import { UatuSidebar } from './vscode/sidebar';
 import { UatuStatusBar } from './vscode/statusBar';
 
 let controller: UatuController | undefined;
@@ -32,6 +33,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const c = controller;
   context.subscriptions.push(
     c,
+    new UatuSidebar(c),
     vscode.commands.registerCommand('uatu.showStatus', async () => {
       const detail = c.describe();
       output.appendLine(detail);

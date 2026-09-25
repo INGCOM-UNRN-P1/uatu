@@ -21,6 +21,26 @@ export class EventEmitter<T> {
   public fire(e: T): void {
     [...this.listeners].forEach((l) => l(e));
   }
+  public dispose(): void {
+    this.listeners = [];
+  }
+}
+
+export class TreeItem {
+  public id?: string;
+  public description?: string;
+  public tooltip?: unknown;
+  public iconPath?: unknown;
+  public contextValue?: string;
+  constructor(public label: string, public collapsibleState: number) {}
+}
+
+export interface MockTreeView {
+  id: string;
+  provider: { getChildren(n?: unknown): unknown[]; getTreeItem(n: unknown): TreeItem };
+  description?: string;
+  badge?: { value: number; tooltip: string };
+  selection: unknown[];
 }
 
 class Uri {
@@ -51,6 +71,11 @@ export interface MockState {
   messages: { level: string; text: string }[];
   statusTexts: string[];
   statusMessages: string[];
+  treeViews: Map<string, MockTreeView>;
+  openedDocuments: { language: string; content: string }[];
+  clipboardWrites: string[];
+  executed: { command: string; args: unknown[] }[];
+  quickPickChoice: number;
   extensions: { id: string; isActive: boolean; packageJSON: { version: string } }[];
 }
 
@@ -63,6 +88,11 @@ export const state: MockState = {
   messages: [],
   statusTexts: [],
   statusMessages: [],
+  treeViews: new Map(),
+  openedDocuments: [],
+  clipboardWrites: [],
+  executed: [],
+  quickPickChoice: 0,
   extensions: [],
 };
 
@@ -98,6 +128,14 @@ export const vscodeMock: any = {
   Uri,
   EventEmitter,
   StatusBarAlignment: { Left: 1, Right: 2 },
+  TreeItem,
+  TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+  ThemeIcon: class {
+    constructor(public id: string, public color?: unknown) {}
+  },
+  MarkdownString: class {
+    constructor(public value: string) {}
+  },
   TextDocumentChangeReason: { Undo: 1, Redo: 2 },
   ThemeColor: class {
     constructor(public id: string) {}
@@ -134,6 +172,13 @@ export const vscodeMock: any = {
       return { dispose() {} };
     },
     onDidChangeWindowState: events.windowState.event,
+    createTreeView: (id: string, opts: { treeDataProvider: MockTreeView['provider'] }) => {
+      const view: MockTreeView & { dispose(): void } = { id, provider: opts.treeDataProvider, selection: [], dispose() {} };
+      state.treeViews.set(id, view);
+      return view;
+    },
+    showQuickPick: async (items: unknown[]) => items[state.quickPickChoice],
+    showTextDocument: async () => undefined,
   },
   workspace: {
     get workspaceFolders() {
@@ -146,6 +191,10 @@ export const vscodeMock: any = {
     onDidChangeTextDocument: events.changeText.event,
     onDidSaveTextDocument: events.saveText.event,
     onDidChangeWorkspaceFolders: events.folders.event,
+    openTextDocument: async (doc: { language: string; content: string }) => {
+      state.openedDocuments.push(doc);
+      return doc;
+    },
   },
   authentication: {
     getSession: async () => ({ account: { label: state.githubLogin, id: '1' }, accessToken: 't', id: 's', scopes: [] }),
@@ -157,9 +206,23 @@ export const vscodeMock: any = {
     onDidChange: events.extensionsChange.event,
   },
   env: {
-    clipboard: { readText: async () => state.clipboard },
+    clipboard: {
+      readText: async () => state.clipboard,
+      writeText: async (t: string) => void state.clipboardWrites.push(t),
+    },
   },
-  commands: { registerCommand: () => ({ dispose() {} }) },
+  commands: {
+    registered: new Map<string, (...args: unknown[]) => unknown>(),
+    registerCommand(id: string, fn: (...args: unknown[]) => unknown) {
+      this.registered.set(id, fn);
+      return { dispose: () => this.registered.delete(id) };
+    },
+    async executeCommand(command: string, ...args: unknown[]) {
+      state.executed.push({ command, args });
+      const fn = this.registered.get(command);
+      return fn ? fn(...args) : undefined;
+    },
+  },
 };
 
 let installed = false;
