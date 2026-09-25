@@ -26,6 +26,19 @@ anterior. Los eventos se agrupan en lotes que se guardan en la rama
 historia con `main`, y la extensión nunca modifica sus archivos, su index ni sus
 commits.
 
+## Panel lateral
+
+El ícono **Uatu** de la barra de actividad (o un clic en la barra de estado)
+abre dos vistas:
+
+- **Monitoreo**: fase del examen con cuenta regresiva, datos de la sesión, qué
+  monitores están activos y su estado, sincronización con el repositorio y
+  calibración del reloj.
+- **Bitácora**: cada evento registrado con su hora, un resumen y su estado
+  (*registrado*, *en lote* o *sincronizado*). Se puede agrupar por lote, por
+  tipo o cronológicamente, ver el detalle de cada evento con su hash y su firma,
+  y copiar el hash. El contenido de los pegados solo aparece cifrado.
+
 ## Estados en la barra inferior
 
 | Indicador | Significado |
@@ -38,7 +51,11 @@ commits.
 
 ## Comandos
 
+- **Uatu: Abrir panel de monitoreo**
 - **Uatu: Mostrar estado de la sesión**
 - **Uatu: Iniciar / reintentar sesión de examen**
 - **Uatu: Sincronizar telemetría ahora**
 - **Uatu: Mostrar registro**
+- **Uatu: Abrir carpeta local de la sesión**
+
+Manual completo: <https://github.com/INGCOM-UNRN-P1/uatu/blob/main/manual/index.md>

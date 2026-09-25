@@ -7,21 +7,25 @@ externas, foco de ventana y extensiones prohibidas) en ramas huérfanas del prop
 repositorio del estudiante. El contenido del portapapeles viaja cifrado para
 la cátedra, y la cadena de eventos queda firmada.
 
-La especificación completa está en [`SPEC.md`](SPEC.md) y los formatos exactos en
+📖 **[Manual completo](manual/index.md)**: guía del estudiante y de la
+cátedra, referencia, modelo de amenazas y solución de problemas. La
+especificación está en [`SPEC.md`](SPEC.md) y los formatos exactos en
 [`docs/protocolo.md`](docs/protocolo.md).
 
 ## Componentes
 
 | Ruta | Descripción |
 |---|---|
-| `extension/` | Extensión de VS Code (TypeScript): time-gating, identidad GitHub, disclaimer Fair Play, observadores, hash-chain Ed25519, cifrado ECIES, WAL, micro-lotes y sincronización Git con backoff y jitter. |
+| `extension/` | Extensión de VS Code (TypeScript): time-gating, identidad GitHub, disclaimer Fair Play, observadores, hash-chain Ed25519, cifrado ECIES, WAL, micro-lotes, sincronización Git con backoff y jitter, y panel lateral de monitoreo y bitácora. |
+| `manual/` | Manual completo del sistema. |
 | `templates/exam-repo/` | Workflow `workflow_dispatch` de evaluación forense y manifiesto de ejemplo para el repositorio del examen. |
 
 Las herramientas Python viven en un repositorio aparte,
 [**uatu-tools**](https://github.com/INGCOM-UNRN-P1/uatu-tools): `uatu-audit`
 (validador forense para CI: firmas, cadena, lotes, génesis, heurísticas y
-descifrado; códigos de salida 0/1/2) y `uatu-admin` (claves raíz y docentes,
-registro de claves y firma de `.uatu.conf`).
+descifrado; códigos de salida 0/1/2) y `uatu-admin` (almacén de claves,
+registro de docentes, firma de `.uatu.conf`, secretos de GitHub y protección
+de ramas).
 
 ```
 Repositorio del estudiante (origin)
@@ -41,40 +45,45 @@ uv tool install "git+https://github.com/INGCOM-UNRN-P1/uatu-tools"
 Esto deja disponibles `uatu-admin` y `uatu-audit`. Sin instalar nada, se
 puede usar `uvx --from "git+https://github.com/INGCOM-UNRN-P1/uatu-tools" uatu-admin ...`.
 
-1. **Clave raíz institucional** (una vez):
+Las claves quedan en `~/.config/uatu/keys/<id>/` y los comandos las
+referencian por identificador.
+
+1. **Clave raíz institucional** (una vez), embebida en el VSIX por el
+   workflow *Release* a partir de la variable `UATU_TRUST_ANCHORS`:
 
    ```bash
-   uatu-admin root-keygen --out secretos/ --key-id uba-root-2026
+   uatu-admin root-keygen --key-id inicial_unrn
+   uatu-admin keys setup-anchors inicial_unrn --repo INGCOM-UNRN-P1/uatu
    ```
 
-   Copiar el `anchor` que imprime en `extension/resources/trust-anchors.json`
-   y empaquetar la extensión (`cd extension && npm ci && npm run package`).
-
-2. **Claves del docente** y **registro público**:
+2. **Clave del docente** y **registro público**, que se publica en la URL de
+   `auth.public_key_registry_url` (HTTPS):
 
    ```bash
-   uatu-admin keygen --out secretos/ --key-id prof-lead-2026
-   uatu-admin registry-add --registry keys.json --key-id prof-lead-2026 \
-       --verify-key <ed25519_verify_key> --encrypt-key <x25519_encryption_key>
-   uatu-admin registry-sign --registry keys.json \
-       --root-key secretos/uba-root-2026.root.pem --root-key-id uba-root-2026
+   uatu-admin keygen --key-id prof-lead-2026
+   uatu-admin registry-add --registry keys.json --key-id prof-lead-2026
+   uatu-admin registry-sign --registry keys.json --root-key-id inicial_unrn
    ```
-
-   Publicar `keys.json` en la URL de `auth.public_key_registry_url` (HTTPS).
 
 3. **Manifiesto del examen**: partir de `templates/exam-repo/uatu.conf.example`,
    ajustar la ventana y firmarlo:
 
    ```bash
-   uatu-admin sign-config --config .uatu.conf \
-       --key secretos/prof-lead-2026.ed25519.pem --key-id prof-lead-2026
+   uatu-admin sign-config --config .uatu.conf --key-id prof-lead-2026
    ```
 
 4. **Repositorio plantilla del examen** (p. ej. GitHub Classroom): incluir
-   `.uatu.conf` y `templates/exam-repo/.github/workflows/uatu-audit.yml`.
-   Configurar los secretos `UATU_TEACHER_PUBLIC_KEY` (Ed25519 en hex) y
-   `UATU_TEACHER_PRIVATE_KEY` (PEM X25519), y una regla de protección que
-   impida force-push y borrado sobre `uatu-audit/**`. El workflow clona
+   `.uatu.conf` y `templates/exam-repo/.github/workflows/uatu-audit.yml`, y
+   configurar los secretos del workflow y la protección de las ramas de
+   telemetría (sin borrado ni force-push):
+
+   ```bash
+   uatu-admin keys setup-audit prof-lead-2026 --repo ORG/examen
+   uatu-admin protect-branches --repo ORG/examen
+   ```
+
+   Con Classroom conviene hacerlo a nivel de organización (`--org ORG` y, en
+   `protect-branches`, `--repo-pattern 'examen-*'`). El workflow clona
    uatu-tools y lo instala con `uv tool install`; la variable opcional
    `UATU_TOOLS_REF` fija una versión (p. ej. `v2.1.0`).
 
@@ -83,8 +92,7 @@ puede usar `uvx --from "git+https://github.com/INGCOM-UNRN-P1/uatu-tools" uatu-a
 
    ```bash
    git fetch origin '+refs/heads/uatu-audit/*:refs/remotes/origin/uatu-audit/*'
-   uatu-audit --repo . --teacher-key <hex> \
-       --decrypt-key secretos/prof-lead-2026.x25519.pem --md-out reporte.md
+   uatu-audit --repo . --md-out reporte.md
    ```
 
 ## Qué ve y qué registra el estudiante
@@ -98,6 +106,11 @@ Con `.uatu.conf` presente y firma válida, la extensión:
   empuja a su rama de auditoría sin tocar el working tree ni el index;
 - después de `deadline_utc` desmonta los observadores, vuelca lo pendiente y
   muestra `$(check) Uatu: Examen Concluido`.
+
+El ícono **Uatu** de la barra de actividad abre un panel con dos vistas:
+*Monitoreo* (examen, sesión, monitores, sincronización y reloj) y *Bitácora*
+(cada evento registrado, agrupado por lote, tipo o tiempo, con su hash, firma y
+estado de sincronización).
 
 Ante cortes de red o cierres abruptos, los eventos quedan en un WAL local
 y se sincronizan en la siguiente apertura.
