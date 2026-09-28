@@ -18,7 +18,7 @@ herramientas de cátedra `uatu-admin` y `uatu-audit`
 ([INGCOM-UNRN-P1/uatu-tools](https://github.com/INGCOM-UNRN-P1/uatu-tools)).
 La referencia exhaustiva de cada opción de línea de comandos está en el
 [manual de uatu-tools](https://github.com/INGCOM-UNRN-P1/uatu-tools/blob/main/manual/index.md),
-y los formatos de datos en [`docs/protocolo.md`](../docs/protocolo.md).
+y los formatos de datos en [`docs/protocolo.md`](docs/protocolo.md).
 
 ---
 
@@ -343,7 +343,7 @@ vieja se retira del registro cuando ya no quedan exámenes que la usen.
 
 ### 5.4 Manifiesto `.uatu.conf`
 
-Partir de [`templates/exam-repo/uatu.conf.example`](../templates/exam-repo/uatu.conf.example):
+Partir de [`templates/exam-repo/uatu.conf.example`](templates/exam-repo/uatu.conf.example):
 
 | Campo | Tipo / rango | Por omisión | Descripción |
 |---|---|---|---|
@@ -529,7 +529,7 @@ sesión.
 ### 6.4 Formatos
 
 Serialización canónica, génesis, eventos, sobre cifrado, lotes, registro y WAL
-están especificados en [`docs/protocolo.md`](../docs/protocolo.md).
+están especificados en [`docs/protocolo.md`](docs/protocolo.md).
 
 ---
 
