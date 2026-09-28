@@ -4,6 +4,7 @@ import { EventData, EventType } from '../audit/events';
 import { UatuManifest } from '../config/manifest';
 import { Clock } from '../core/time';
 import { auditExtensions, ExtensionState } from '../monitors/extensionAudit';
+import { auditSettings, SettingState } from '../monitors/settingsAudit';
 import { FocusTracker } from '../monitors/focusTracker';
 import { DetectedInsertion, InsertionDetector } from '../monitors/insertionDetector';
 import { buildInsertionRecord } from '../monitors/insertionEvent';
@@ -48,13 +49,18 @@ export interface MonitorSnapshot {
   unfocusedTotalMs: number;
   lastHeartbeatMs?: number;
   extensions: { id: string; state: ExtensionState }[];
+  settings: { key: string; state: SettingState }[];
   insertions: number;
 }
+
+/** Id de uatu (publisher.name de su package.json): nunca es una extensión «no permitida». */
+const ID_PROPIO = 'uatu.uatu';
 
 export class EditorMonitors implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly focus: FocusTracker;
   private readonly extensionState = new Map<string, ExtensionState>();
+  private readonly settingState = new Map<string, SettingState>();
   private readonly detector: InsertionDetector | undefined;
   private heartbeat: NodeJS.Timeout | undefined;
   private lastSaveFlushMs = 0;
@@ -86,9 +92,14 @@ export class EditorMonitors implements vscode.Disposable {
       }
     }
 
-    if (monitoring.disallowed_extensions.length > 0) {
+    if (this.auditaExtensiones()) {
       this.disposables.push(vscode.extensions.onDidChange(() => this.checkExtensions()));
       this.checkExtensions();
+    }
+
+    if (monitoring.setting_rules.length > 0) {
+      this.disposables.push(vscode.workspace.onDidChangeConfiguration((e) => this.checkSettings(e)));
+      this.checkSettings();
     }
 
     // Guardado del estudiante: volcado forzado, limitado a uno cada 10 s.
@@ -163,13 +174,24 @@ export class EditorMonitors implements vscode.Disposable {
     }
   }
 
+  private auditaExtensiones(): boolean {
+    const { disallowed_extensions, allowed_extensions } = this.ctx.manifest.monitoring;
+    return disallowed_extensions.length > 0 || allowed_extensions.length > 0;
+  }
+
   private checkExtensions(): void {
     const installed = vscode.extensions.all.map((x) => ({
       id: x.id,
       version: String((x.packageJSON as { version?: string })?.version ?? ''),
       isActive: x.isActive,
+      builtin: (x.packageJSON as { isBuiltin?: boolean })?.isBuiltin === true,
     }));
-    const findings = auditExtensions(installed, this.ctx.manifest.monitoring.disallowed_extensions, this.extensionState);
+    const { disallowed_extensions, allowed_extensions } = this.ctx.manifest.monitoring;
+    const findings = auditExtensions(
+      installed,
+      { disallowed: disallowed_extensions, allowed: allowed_extensions, propia: ID_PROPIO },
+      this.extensionState
+    );
     for (const f of findings) {
       this.ctx.record('disallowed_extension', { extension_id: f.extension_id, version: f.version, state: f.state });
       if (f.state !== 'removed') {
@@ -180,10 +202,24 @@ export class EditorMonitors implements vscode.Disposable {
     }
   }
 
+  private checkSettings(e?: vscode.ConfigurationChangeEvent): void {
+    const reglas = this.ctx.manifest.monitoring.setting_rules.filter((r) => !e || e.affectsConfiguration(r.key));
+    const findings = auditSettings(reglas, (key) => vscode.workspace.getConfiguration().get(key), this.settingState);
+    for (const f of findings) {
+      this.ctx.record('disallowed_setting', { key: f.key, value_json: f.value_json, state: f.state, note: f.note });
+      if (f.state === 'violated') {
+        const motivo = f.note ? ` (${f.note})` : '';
+        void vscode.window.showWarningMessage(
+          `Uatu: la configuración "${f.key}" no está permitida durante el examen${motivo} y quedó registrada. Cámbiela para continuar.`
+        );
+      }
+    }
+  }
+
   private onHeartbeat(): void {
     const now = this.ctx.clock.now();
     // La activación de extensiones no emite eventos: se sondea en cada latido.
-    if (this.ctx.manifest.monitoring.disallowed_extensions.length > 0) {
+    if (this.auditaExtensiones()) {
       this.checkExtensions();
     }
     this.lastHeartbeatMs = now;
@@ -201,6 +237,7 @@ export class EditorMonitors implements vscode.Disposable {
       unfocusedTotalMs: this.focus.totalUnfocused(now),
       lastHeartbeatMs: this.lastHeartbeatMs,
       extensions: [...this.extensionState.entries()].map(([id, state]) => ({ id, state })),
+      settings: [...this.settingState.entries()].map(([key, state]) => ({ key, state })),
       insertions: this.insertions,
     };
   }

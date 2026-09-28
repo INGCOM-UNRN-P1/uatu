@@ -194,7 +194,8 @@ Al inicializar la sesión durante el período activo del examen:
 
 ### RF-03: Telemetría Complementaria del Entorno
 * **Pérdida de foco:** Monitoreo vía `vscode.window.onDidChangeWindowState` registrando transiciones de foco con timestamps para computar el tiempo acumulado fuera del editor.
-* **Auditoría de extensiones no autorizadas:** Detección activa frente a `vscode.extensions.all`. La activación de extensiones bloqueadas dispara un evento prioritario.
+* **Auditoría de extensiones no autorizadas:** Detección activa frente a `vscode.extensions.all`, con lista de prohibidas (`disallowed_extensions`) o de permitidas (`allowed_extensions`: cualquier otra, salvo las integradas, es un hallazgo). La activación de extensiones bloqueadas dispara un evento prioritario.
+* **Configuración del editor:** Reglas `setting_rules` sobre claves de configuración (`forbid` o `allow`), evaluadas al iniciar y en `onDidChangeConfiguration`; la violación y su corrección se registran como `disallowed_setting` (evento prioritario). Portado de grid, cuya bitácora con SHA-256 sin firma se podía reescribir.
 * **Dinámica de tipeo (Keystroke Dynamics):** Postergada para fases futuras bajo entornos no presenciales.
 
 ## 5. Diseño Criptográfico y Esquema Híbrido

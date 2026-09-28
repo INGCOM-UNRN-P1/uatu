@@ -46,6 +46,8 @@ export interface DisclaimerInfo {
   deadlineMs: number;
   branchPrefix: string;
   disallowedExtensions: string[];
+  allowedExtensions?: string[];
+  settingRules?: { key: string; note?: string }[];
 }
 
 /** Muestra el modal bloqueante de términos. Devuelve true si el estudiante acepta. */
@@ -63,6 +65,12 @@ export async function showFairPlayDisclaimer(info: DisclaimerInfo): Promise<bool
       `para uso exclusivo del cuerpo docente.`,
     info.disallowedExtensions.length > 0
       ? `\nExtensiones no permitidas durante el examen: ${info.disallowedExtensions.join(', ')}.`
+      : '',
+    (info.allowedExtensions ?? []).length > 0
+      ? `\nSolo se permiten estas extensiones (además de las integradas de VS Code): ${info.allowedExtensions!.join(', ')}.`
+      : '',
+    (info.settingRules ?? []).length > 0
+      ? `\nConfiguración controlada del editor: ${info.settingRules!.map((r) => (r.note ? `${r.key} (${r.note})` : r.key)).join(', ')}.`
       : '',
   ].join('\n');
   const choice = await vscode.window.showWarningMessage(

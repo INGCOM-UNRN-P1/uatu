@@ -363,6 +363,8 @@ Partir de [`templates/exam-repo/uatu.conf.example`](../templates/exam-repo/uatu.
 | `monitoring.clipboard.hash_algorithm` | `"sha256"` | `sha256` | Hash del texto insertado. |
 | `monitoring.window_focus` | booleano | `true` | Registro de foco de ventana. |
 | `monitoring.disallowed_extensions` | lista de IDs | `[]` | Extensiones prohibidas. |
+| `monitoring.allowed_extensions` | lista de IDs | `[]` | Si no está vacía, solo se permiten estas (más las integradas de VS Code): cualquier otra es un hallazgo. |
+| `monitoring.setting_rules` | lista de reglas | `[]` | Reglas sobre la configuración del editor: `{"key": "github.copilot.enable", "forbid": true, "note": "Sin IA"}` marca el valor verdadero; `{"key": "editor.formatOnSave", "allow": [true]}` marca cualquier valor fuera de la lista. |
 | `crypto.teacher_key_id` | texto | — | Docente que firma (en el registro). |
 | `crypto.signature` | hex | — | Firma Ed25519 (la escribe `sign-config`). |
 | `git.telemetry_branch_prefix` | ruta de ref | `uatu-audit` | Prefijo de las ramas de telemetría. |
@@ -509,14 +511,16 @@ desfase de 30 s o más se registra como evento `clock_skew`.
 | `clipboard_paste` | Inserción masiva igual al portapapeles | archivo, rango, caracteres, hash, sobre cifrado |
 | `external_insertion` | Inserción masiva que no vino del portapapeles | ídem, hash del portapapeles, foco |
 | `window_focus` | Cambio de foco | enfocada, duración fuera, total fuera |
-| `disallowed_extension` | Extensión prohibida instalada/activa/quitada | id, versión, estado |
+| `disallowed_extension` | Extensión prohibida (o fuera de la lista de permitidas) instalada/activa/quitada | id, versión, estado |
+| `disallowed_setting` | Configuración que viola una regla, o que vuelve a cumplirla | clave, valor, estado, nota |
 | `heartbeat` | Cada `heartbeat_interval_seconds` | tiempo activo, foco, total fuera |
 | `clock_skew` | Desfase ≥ 30 s al iniciar | desfase, fuente |
 | `config_changed` | `.uatu.conf` modificado o borrado en sesión | hash nuevo, validez de firma |
 | `session_end` | Deadline, cierre del IDE o recuperación | motivo |
 
-Los eventos `session_start`, `disallowed_extension`, `clock_skew`,
-`config_changed` y `session_end` fuerzan el volcado inmediato del lote.
+Los eventos `session_start`, `disallowed_extension`, `disallowed_setting`,
+`clock_skew`, `config_changed` y `session_end` fuerzan el volcado inmediato del
+lote.
 
 ### 6.3 Archivos locales
 

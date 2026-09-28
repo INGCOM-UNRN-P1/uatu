@@ -99,6 +99,7 @@ Como el evento contiene `prev_hash` y `timestamp_utc`, `H_i` instancia
 | `clipboard_paste` / `external_insertion` | `target_file`, `range {start:[l,c], end:[l,c]}`, `char_count`, `change_count`, `sha256_plaintext`, `clipboard_match`, `window_focused`, `active_editor`, `encrypted_payload?`, `clipboard_sha256?` |
 | `window_focus` | `focused`, `unfocused_total_ms`, `unfocused_ms?` |
 | `disallowed_extension` | `extension_id`, `version`, `state` (`installed`/`active`/`removed`) |
+| `disallowed_setting` | `key`, `value_json` (valor observado como JSON, hasta 200 caracteres), `state` (`violated`/`resolved`), `note` |
 | `heartbeat` | `uptime_seconds`, `window_focused`, `unfocused_total_ms` |
 | `clock_skew` | `offset_ms`, `source` |
 | `config_changed` | `deleted?`, `config_sha256?`, `signature_valid?`, `parse_error?` |
@@ -109,7 +110,15 @@ Como el evento contiene `prev_hash` y `timestamp_utc`, `H_i` instancia
 portapapeles solo se guarda su hash.
 
 Eventos prioritarios (vuelcan el lote de inmediato): `session_start`,
-`disallowed_extension`, `clock_skew`, `config_changed`, `session_end`.
+`disallowed_extension`, `disallowed_setting`, `clock_skew`, `config_changed`,
+`session_end`.
+
+Una extensión es `disallowed_extension` si está en
+`monitoring.disallowed_extensions` o si `monitoring.allowed_extensions` no está
+vacía y no la incluye (salvo las integradas de VS Code y uatu).
+`disallowed_setting` se registra cuando una clave de
+`monitoring.setting_rules` pasa a violar su regla (`violated`) y cuando vuelve
+a cumplirla (`resolved`), no en cada lectura.
 
 ## 6. Sobre cifrado (ECIES)
 

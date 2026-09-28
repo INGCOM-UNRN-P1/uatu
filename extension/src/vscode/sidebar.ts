@@ -18,7 +18,14 @@ export const STATUS_VIEW_ID = 'uatu.statusView';
 export const LOG_VIEW_ID = 'uatu.logView';
 
 /** Eventos que se cuentan en el badge del panel: los que la cátedra revisará. */
-const FLAGGED = new Set(['clipboard_paste', 'external_insertion', 'disallowed_extension', 'config_changed', 'clock_skew']);
+const FLAGGED = new Set([
+  'clipboard_paste',
+  'external_insertion',
+  'disallowed_extension',
+  'disallowed_setting',
+  'config_changed',
+  'clock_skew',
+]);
 
 const GROUPING_LABELS: Record<LogGrouping, string> = {
   batch: 'por lote',

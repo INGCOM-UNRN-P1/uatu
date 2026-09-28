@@ -145,3 +145,29 @@ test('resúmenes y detalle del evento', () => {
   assert.equal(detail._uatu.estado, 'sincronizado');
   assert.equal(detail.data.char_count, 85);
 });
+
+test('configuración del editor: evento resumido y nodo de reglas (portado de grid, N-GRID-01)', () => {
+  const kp = UatuCryptoEngine.generateStudentKeyPair();
+  const chain = new HashChain(kp.privateKeyDer, kp.publicKeyHex, { nextSequence: 0, lastHash: 'a'.repeat(64) });
+  const violada = chain.append('disallowed_setting', { key: 'github.copilot.enable', value_json: 'true', state: 'violated', note: 'Sin IA' }, T0);
+  const corregida = chain.append('disallowed_setting', { key: 'github.copilot.enable', value_json: 'false', state: 'resolved', note: 'Sin IA' }, T0 + 1);
+  assert.equal(summarizeEvent(violada), 'github.copilot.enable = true');
+  assert.equal(summarizeEvent(corregida), 'github.copilot.enable = false (corregida)');
+
+  const base = snapshot();
+  const s = snapshot({
+    exam: { ...base.exam!, allowedExtensions: ['ms-vscode.cpptools'],
+      settingRules: [{ key: 'github.copilot.enable', note: 'Sin IA' }, { key: 'editor.formatOnSave' }] },
+    monitors: { ...base.monitors!, extensions: [{ id: 'continue.continue', state: 'installed' }],
+      settings: [{ key: 'github.copilot.enable', state: 'violated' }] },
+  });
+  const tree = buildStatusTree(s);
+  const reglas = find(tree, 'st-mon-settings');
+  assert.ok(reglas);
+  assert.equal(reglas.description, '2 regla(s) · 1 sin cumplir');
+  assert.equal(find(tree, 'st-mon-set-github.copilot.enable')?.description, 'no permitida');
+  assert.equal(find(tree, 'st-mon-set-editor.formatOnSave')?.description, 'cumple');
+  const ext = find(tree, 'st-mon-ext');
+  assert.equal(ext?.label, 'Extensiones (lista de permitidas)');
+  assert.ok(find(tree, 'st-mon-ext-continue.continue'), 'la extensión detectada fuera de la lista figura en el panel');
+});

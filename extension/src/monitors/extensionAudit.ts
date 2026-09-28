@@ -6,6 +6,19 @@ export interface ExtensionInfo {
   id: string;
   version: string;
   isActive: boolean;
+  /** Integrada en VS Code (`packageJSON.isBuiltin` o publisher `vscode`): nunca es un hallazgo. */
+  builtin?: boolean;
+}
+
+/**
+ * Política de extensiones del manifiesto: la lista de prohibidas y, si no está
+ * vacía, la de permitidas (portada de grid, N-GRID-01), con la que cualquier
+ * otra extensión instalada es un hallazgo. `propia` es la de uatu, siempre permitida.
+ */
+export interface ExtensionPolicy {
+  disallowed: string[];
+  allowed?: string[];
+  propia?: string;
 }
 
 export type ExtensionState = 'installed' | 'active' | 'removed';
@@ -23,15 +36,20 @@ export interface ExtensionFinding {
  */
 export function auditExtensions(
   installed: ExtensionInfo[],
-  disallowed: string[],
+  policy: string[] | ExtensionPolicy,
   previous: Map<string, ExtensionState>
 ): ExtensionFinding[] {
+  const { disallowed, allowed = [], propia } = Array.isArray(policy) ? { disallowed: policy } : policy;
   const blocked = new Set(disallowed.map((d) => d.toLowerCase()));
+  const permitidas = new Set(allowed.map((d) => d.toLowerCase()));
+  const noPermitida = (ext: ExtensionInfo, id: string): boolean =>
+    blocked.has(id) ||
+    (permitidas.size > 0 && !permitidas.has(id) && !ext.builtin && !id.startsWith('vscode.') && id !== propia?.toLowerCase());
   const findings: ExtensionFinding[] = [];
   const seen = new Set<string>();
   for (const ext of installed) {
     const id = ext.id.toLowerCase();
-    if (!blocked.has(id)) {
+    if (!noPermitida(ext, id)) {
       continue;
     }
     seen.add(id);

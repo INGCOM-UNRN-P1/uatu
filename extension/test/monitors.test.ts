@@ -131,6 +131,22 @@ test('auditExtensions reporta solo transiciones de extensiones bloqueadas', () =
   assert.deepEqual(f, [{ extension_id: 'github.copilot', version: '', state: 'removed' }]);
 });
 
+test('auditExtensions con lista de permitidas: cualquier otra es un hallazgo, salvo las integradas y uatu (N-GRID-01)', () => {
+  const prev = new Map<string, ExtensionState>();
+  const f = auditExtensions(
+    [
+      { id: 'ms-vscode.cpptools', version: '2', isActive: true },
+      { id: 'Continue.continue', version: '1.2', isActive: false },
+      { id: 'vscode.git', version: '1.0', isActive: true },
+      { id: 'ms-vscode.js-debug', version: '1.9', isActive: true, builtin: true },
+      { id: 'uatu.uatu', version: '2.1.0', isActive: true },
+    ],
+    { disallowed: [], allowed: ['MS-VSCODE.cpptools'], propia: 'uatu.uatu' },
+    prev
+  );
+  assert.deepEqual(f, [{ extension_id: 'continue.continue', version: '1.2', state: 'installed' }]);
+});
+
 
 test('buildInsertionRecord cifra el texto insertado y clasifica el origen', () => {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('x25519');

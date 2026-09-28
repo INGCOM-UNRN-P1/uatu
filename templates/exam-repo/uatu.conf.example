@@ -25,6 +25,10 @@
       "github.copilot",
       "github.copilot-chat",
       "continue.continue"
+    ],
+    "setting_rules": [
+      { "key": "github.copilot.enable", "forbid": true, "note": "Sin asistentes de IA durante el examen" },
+      { "key": "editor.inlineSuggest.enabled", "allow": [false], "note": "Sin sugerencias en línea" }
     ]
   },
   "crypto": {

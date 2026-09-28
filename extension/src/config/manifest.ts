@@ -30,10 +30,25 @@ export interface ClipboardSettings {
   hash_algorithm: 'sha256';
 }
 
+/**
+ * Regla sobre la configuración del editor (portada de grid, N-GRID-01): con
+ * `forbid`, es un hallazgo que el valor sea verdadero (p. ej.,
+ * `github.copilot.enable`); con `allow`, que no sea uno de los valores listados.
+ */
+export interface SettingRule {
+  key: string;
+  forbid?: boolean;
+  allow?: unknown[];
+  note?: string;
+}
+
 export interface MonitoringSettings {
   clipboard: ClipboardSettings;
   window_focus: boolean;
   disallowed_extensions: string[];
+  /** Si no está vacía, toda extensión que no figure (salvo las integradas de VS Code) es un hallazgo. */
+  allowed_extensions: string[];
+  setting_rules: SettingRule[];
 }
 
 export interface CryptoSettings {
@@ -187,6 +202,11 @@ export function parseManifest(text: string): ParsedManifest {
   if (!Array.isArray(disallowed) || !disallowed.every((x) => typeof x === 'string')) {
     throw new ManifestError('monitoring.disallowed_extensions debe ser una lista de identificadores.');
   }
+  const allowed = m.allowed_extensions ?? [];
+  if (!Array.isArray(allowed) || !allowed.every((x) => typeof x === 'string')) {
+    throw new ManifestError('monitoring.allowed_extensions debe ser una lista de identificadores.');
+  }
+  const settingRules = parseSettingRules(m.setting_rules);
   const monitoring: MonitoringSettings = {
     clipboard: {
       enabled: bool(clip, 'enabled', 'monitoring.clipboard', true),
@@ -196,6 +216,8 @@ export function parseManifest(text: string): ParsedManifest {
     },
     window_focus: bool(m, 'window_focus', 'monitoring', true),
     disallowed_extensions: (disallowed as string[]).map((x) => x.toLowerCase()),
+    allowed_extensions: (allowed as string[]).map((x) => x.toLowerCase()),
+    setting_rules: settingRules,
   };
 
   const cryptoSettings: CryptoSettings = {
@@ -229,6 +251,40 @@ export function parseManifest(text: string): ParsedManifest {
     deadlineMs,
     sha256,
   };
+}
+
+function parseSettingRules(value: unknown): SettingRule[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new ManifestError('monitoring.setting_rules debe ser una lista de reglas.');
+  }
+  return value.map((regla, i) => {
+    const where = `monitoring.setting_rules[${i}]`;
+    if (!isObject(regla) || typeof regla.key !== 'string' || regla.key.trim() === '') {
+      throw new ManifestError(`${where} necesita \`key\` (la clave de configuración, p. ej. github.copilot.enable).`);
+    }
+    const tieneForbid = regla.forbid !== undefined;
+    const tieneAllow = regla.allow !== undefined;
+    if (tieneForbid === tieneAllow) {
+      throw new ManifestError(`${where} (${regla.key}) debe tener \`forbid: true\` o \`allow: [...]\`, no ambos ni ninguno.`);
+    }
+    if (tieneForbid && regla.forbid !== true) {
+      throw new ManifestError(`${where} (${regla.key}): \`forbid\` solo admite true.`);
+    }
+    if (tieneAllow && !Array.isArray(regla.allow)) {
+      throw new ManifestError(`${where} (${regla.key}): \`allow\` debe ser una lista de valores.`);
+    }
+    if (regla.note !== undefined && typeof regla.note !== 'string') {
+      throw new ManifestError(`${where} (${regla.key}): \`note\` debe ser texto.`);
+    }
+    const salida: SettingRule = { key: regla.key };
+    if (tieneForbid) salida.forbid = true;
+    if (tieneAllow) salida.allow = regla.allow as unknown[];
+    if (typeof regla.note === 'string') salida.note = regla.note;
+    return salida;
+  });
 }
 
 /** Bytes firmados por la cátedra: manifiesto canónico sin el bloque `crypto`. */

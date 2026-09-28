@@ -12,6 +12,8 @@ export type EventType =
   | 'external_insertion'
   | 'window_focus'
   | 'disallowed_extension'
+  /** Configuración del editor que viola una regla del manifiesto (o que vuelve a cumplirla). */
+  | 'disallowed_setting'
   | 'heartbeat'
   /** Desfase significativo entre el reloj local y la fuente confiable. */
   | 'clock_skew'
@@ -23,6 +25,7 @@ export type EventType =
 export const PRIORITY_EVENTS: ReadonlySet<EventType> = new Set<EventType>([
   'session_start',
   'disallowed_extension',
+  'disallowed_setting',
   'clock_skew',
   'config_changed',
   'session_end',

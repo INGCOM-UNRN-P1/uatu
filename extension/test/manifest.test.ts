@@ -47,3 +47,37 @@ test('verifica la firma docente y detecta alteraciones', () => {
   const other = makePki();
   assert.ok(!verifyManifestSignature(parsed, other.teacherVerifyHex));
 });
+
+test('lee la lista de permitidas y las reglas de configuración (portadas de grid, N-GRID-01)', () => {
+  const m = baseManifest();
+  const monitoring = m.monitoring as Record<string, unknown>;
+  monitoring.allowed_extensions = ['MS-VSCODE.cpptools'];
+  monitoring.setting_rules = [
+    { key: 'github.copilot.enable', forbid: true, note: 'Sin IA' },
+    { key: 'editor.formatOnSave', allow: [true] },
+  ];
+  const parsed = parseManifest(JSON.stringify(m)).manifest.monitoring;
+  assert.deepEqual(parsed.allowed_extensions, ['ms-vscode.cpptools']);
+  assert.deepEqual(parsed.setting_rules, [
+    { key: 'github.copilot.enable', forbid: true, note: 'Sin IA' },
+    { key: 'editor.formatOnSave', allow: [true] },
+  ]);
+  // Los manifiestos anteriores no las traen: listas vacías.
+  const viejo = parseManifest(JSON.stringify(baseManifest())).manifest.monitoring;
+  assert.deepEqual(viejo.allowed_extensions, []);
+  assert.deepEqual(viejo.setting_rules, []);
+});
+
+test('rechaza reglas de configuración mal formadas con un mensaje que nombra la regla', () => {
+  const conReglas = (reglas: unknown) => {
+    const m = baseManifest();
+    (m.monitoring as Record<string, unknown>).setting_rules = reglas;
+    return JSON.stringify(m);
+  };
+  assert.throws(() => parseManifest(conReglas({ key: 'x' })), /debe ser una lista/);
+  assert.throws(() => parseManifest(conReglas([{ forbid: true }])), /necesita `key`/);
+  assert.throws(() => parseManifest(conReglas([{ key: 'x' }])), /forbid: true.*allow/);
+  assert.throws(() => parseManifest(conReglas([{ key: 'x', forbid: true, allow: [1] }])), /no ambos/);
+  assert.throws(() => parseManifest(conReglas([{ key: 'x', forbid: false }])), /solo admite true/);
+  assert.throws(() => parseManifest(conReglas([{ key: 'x', allow: true }])), /lista de valores/);
+});

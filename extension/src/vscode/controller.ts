@@ -116,6 +116,8 @@ export class UatuController implements vscode.Disposable {
         },
         windowFocus: m.monitoring.window_focus,
         disallowedExtensions: m.monitoring.disallowed_extensions,
+        allowedExtensions: m.monitoring.allowed_extensions,
+        settingRules: m.monitoring.setting_rules.map((r) => ({ key: r.key, note: r.note })),
         heartbeatSeconds: m.session.heartbeat_interval_seconds,
         batchIntervalSeconds: m.session.batch_interval_seconds,
         batchMaxEvents: m.session.batch_max_events,
@@ -343,6 +345,8 @@ export class UatuController implements vscode.Disposable {
         deadlineMs: exam.parsed.deadlineMs,
         branchPrefix: m.git.telemetry_branch_prefix,
         disallowedExtensions: m.monitoring.disallowed_extensions,
+        allowedExtensions: m.monitoring.allowed_extensions,
+        settingRules: m.monitoring.setting_rules.map((r) => ({ key: r.key, note: r.note })),
       });
       if (!accepted) {
         this.log('El estudiante no aceptó los términos del examen.');

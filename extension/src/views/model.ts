@@ -23,6 +23,10 @@ export interface ExamView {
   clipboard: { enabled: boolean; threshold: number; encrypt: boolean };
   windowFocus: boolean;
   disallowedExtensions: string[];
+  /** Lista de permitidas (vacía: solo rige la de prohibidas). */
+  allowedExtensions?: string[];
+  /** Claves de configuración controladas por el manifiesto, con su nota. */
+  settingRules?: { key: string; note?: string }[];
   heartbeatSeconds: number;
   batchIntervalSeconds: number;
   batchMaxEvents: number;
@@ -48,6 +52,8 @@ export interface MonitorView {
   unfocusedTotalMs: number;
   lastHeartbeatMs?: number;
   extensions: { id: string; state: 'installed' | 'active' | 'removed' }[];
+  /** Estado de las reglas de configuración (opcional: los snapshots viejos no lo traen). */
+  settings?: { key: string; state: 'violated' | 'resolved' }[];
   insertions: number;
 }
 
@@ -148,6 +154,7 @@ export const EVENT_STYLES: Record<EventType, EventStyle> = {
   external_insertion: { title: 'Inserción externa', icon: 'diff-added', color: 'charts.red' },
   window_focus: { title: 'Foco de ventana', icon: 'eye' },
   disallowed_extension: { title: 'Extensión no permitida', icon: 'extensions', color: 'charts.red' },
+  disallowed_setting: { title: 'Configuración no permitida', icon: 'settings-gear', color: 'charts.red' },
   heartbeat: { title: 'Latido', icon: 'pulse', color: 'disabledForeground' },
   clock_skew: { title: 'Desfase de reloj', icon: 'watch', color: 'charts.yellow' },
   config_changed: { title: 'Cambio de .uatu.conf', icon: 'gear', color: 'charts.red' },
@@ -156,6 +163,9 @@ export const EVENT_STYLES: Record<EventType, EventStyle> = {
 
 function styleFor(ev: AuditEvent): EventStyle {
   const base = EVENT_STYLES[ev.event_type] ?? { title: ev.event_type, icon: 'circle' };
+  if (ev.event_type === 'disallowed_setting' && ev.data.state === 'resolved') {
+    return { title: 'Configuración corregida', icon: 'settings-gear', color: 'charts.green' };
+  }
   if (ev.event_type === 'window_focus') {
     return ev.data.focused
       ? { title: 'Foco recuperado', icon: 'eye' }
@@ -183,6 +193,8 @@ export function summarizeEvent(ev: AuditEvent): string {
       const state = { installed: 'instalada', active: 'activa', removed: 'quitada' }[String(d.state)] ?? String(d.state);
       return `${d.extension_id} (${state})`;
     }
+    case 'disallowed_setting':
+      return `${d.key} = ${d.value_json}${d.state === 'resolved' ? ' (corregida)' : ''}`;
     case 'heartbeat':
       return `activa ${formatDuration(Number(d.uptime_seconds ?? 0) * 1000)}`;
     case 'clock_skew':
@@ -420,13 +432,18 @@ export function buildStatusTree(s: UatuSnapshot): ViewNode[] {
     );
     const detected = new Map((m?.extensions ?? []).map((x) => [x.id, x.state]));
     const flagged = [...detected.values()].filter((st) => st !== 'removed').length;
+    const permitidas = e.allowedExtensions ?? [];
+    // Con lista de permitidas, las detectadas no figuran de antemano en ninguna lista del manifiesto.
+    const vigiladas = [...new Set([...e.disallowedExtensions, ...(permitidas.length > 0 ? detected.keys() : [])])];
     monitorChildren.push({
       id: 'st-mon-ext',
-      label: 'Extensiones prohibidas',
-      description: `${e.disallowedExtensions.length} en la lista${flagged ? ` · ${flagged} detectada(s)` : ''}`,
+      label: permitidas.length > 0 ? 'Extensiones (lista de permitidas)' : 'Extensiones prohibidas',
+      description:
+        (permitidas.length > 0 ? `${permitidas.length} permitida(s)` : `${e.disallowedExtensions.length} en la lista`) +
+        (flagged ? ` · ${flagged} detectada(s)` : ''),
       icon: 'extensions',
       color: flagged ? 'charts.red' : undefined,
-      children: e.disallowedExtensions.map((id) => {
+      children: vigiladas.map((id) => {
         const st = detected.get(id);
         const label = st === 'active' ? 'activa' : st === 'installed' ? 'instalada' : st === 'removed' ? 'quitada' : 'no instalada';
         return leaf(`st-mon-ext-${id}`, id, label, st && st !== 'removed' ? 'warning' : 'pass', {
@@ -434,6 +451,24 @@ export function buildStatusTree(s: UatuSnapshot): ViewNode[] {
         });
       }),
     });
+    const reglas = e.settingRules ?? [];
+    if (reglas.length > 0) {
+      const estados = new Map((m?.settings ?? []).map((x) => [x.key, x.state]));
+      const violadas = [...estados.values()].filter((st) => st === 'violated').length;
+      monitorChildren.push({
+        id: 'st-mon-settings',
+        label: 'Configuración del editor',
+        description: `${reglas.length} regla(s)${violadas ? ` · ${violadas} sin cumplir` : ''}`,
+        icon: 'settings-gear',
+        color: violadas ? 'charts.red' : undefined,
+        children: reglas.map((r) => {
+          const violada = estados.get(r.key) === 'violated';
+          return leaf(`st-mon-set-${r.key}`, r.key, violada ? 'no permitida' : r.note ?? 'cumple', violada ? 'warning' : 'pass', {
+            color: violada ? 'charts.red' : 'charts.green',
+          });
+        }),
+      });
+    }
     monitorChildren.push(
       leaf(
         'st-mon-hb',
