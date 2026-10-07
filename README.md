@@ -10,7 +10,8 @@ la cátedra, y la cadena de eventos queda firmada.
 📖 **[Manual completo](manual/index.md)**: guía del estudiante y de la
 cátedra, referencia, modelo de amenazas y solución de problemas. La
 especificación está en [`SPEC.md`](SPEC.md) y los formatos exactos en
-[`docs/protocolo.md`](docs/protocolo.md).
+[`docs/protocolo.md`](docs/protocolo.md). La liberación de consignas con bloqueo de tiempo está
+en etapa de propuesta: [`docs/propuesta_liberacion_consignas.md`](docs/propuesta_liberacion_consignas.md).
 
 ## Componentes
 
