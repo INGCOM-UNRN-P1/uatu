@@ -1,7 +1,45 @@
 # Propuesta: liberación de consignas con bloqueo de tiempo
 
-Estado: **propuesta** (07/10/26). Origen: decisión 1 de la remediación del
+Estado: **implementada** (21/10/26, Ola 9) con un cambio respecto del diseño
+original (ver «Implementación»). Origen: decisión 1 de la remediación del
 ecosistema — keymaker se retira y esta función pasa a uatu.
+
+## Implementación (21/10/26)
+
+El diseño de abajo liberaba la consigna con un workflow `liberar-consigna.yml`
+en cada repositorio del estudiante, con la clave como secreto de la
+organización. Eso no cumple el requisito 1: el estudiante tiene permiso de
+escritura en su repositorio, puede editar ese workflow (o agregar otro) y hacer
+que imprima `UATU_CONSIGNA_KEY` antes de `start_utc`. Por eso la liberación la
+hace el docente y ningún secreto llega a los repositorios de los estudiantes:
+
+1. `uatu-admin consigna sellar <carpeta> [--key-id ID]` cifra la consigna
+   (AES-256-GCM, el hash como dato asociado), escribe `consigna.enc` y la clave
+   en `consigna.enc.clave` (0600, fuera de los repositorios) y agrega
+   `"consigna": {"carpeta": "consigna", "sha256": …}` al `.uatu.conf`, que se
+   firma como siempre.
+2. `uatu-admin consigna liberar --org ORG --prefijo PREFIJO [--esperar]`
+   consulta la hora del servidor de GitHub (cabecera `Date`); antes de
+   `start_utc` sale con 3 sin descifrar nada (o, con `--esperar`, espera).
+   Después descifra en memoria y publica `consigna/` en cada repositorio con la
+   API de Git: un commit `uatu: liberar consigna (…)` sin autor explícito, con
+   la fecha del servidor. Es idempotente: volver a correrlo reintenta sólo los
+   repositorios que fallaron.
+3. La extensión, al pasar a EN SESIÓN, hace `git pull --ff-only` de la rama
+   actual hasta que la consigna llega (cada 20 s), compara su hash con el del
+   manifiesto firmado y registra `consigna_verificada`.
+4. `uatu-audit` marca como error una liberación anterior a `start_utc`, un
+   contenido distinto del sellado o una consigna que entró por otro commit, y
+   como advertencia una consigna no liberada o un `consigna_verificada` que no
+   coincide.
+
+El hash de una carpeta es SHA-256 de las líneas `<ruta con />\n<sha256 del
+archivo>\n` ordenadas por ruta: lo calculan igual uatu-admin (`consigna
+hash`), uatu-audit y la extensión.
+
+Lo que se resignó: la liberación depende de que el docente corra el comando
+(con `--esperar` puede lanzarlo antes y queda esperando la hora); no hay
+liberación automática por cron.
 
 ## Problema
 
