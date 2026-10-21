@@ -19,6 +19,8 @@ export type EventType =
   | 'clock_skew'
   /** El manifiesto cambió o desapareció durante la sesión. */
   | 'config_changed'
+  /** Hash de la consigna liberada comparado con el del manifiesto firmado. */
+  | 'consigna_verificada'
   | 'session_end';
 
 /** Eventos que fuerzan un volcado inmediato del lote (sección 4, RF-03). */

@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { computeGenesisHash, EMPTY_COMMIT_SHA } from '../audit/hashChain';
 import {
@@ -12,6 +13,7 @@ import {
 import { RegistryResolver, resolveTeacher, TeacherCertificate, TrustAnchor } from '../config/registry';
 import { formatHourMinuteUtc, isoUtc, systemClock } from '../core/time';
 import { UatuCryptoEngine } from '../crypto/cryptoEngine';
+import { consignaTreeHash } from '../core/consigna';
 import { GitPlumbing } from '../git/gitPlumbing';
 import { runGit } from '../git/gitRunner';
 import { AuditSession } from '../session/auditSession';
@@ -72,6 +74,7 @@ export class UatuController implements vscode.Disposable {
   public readonly onDidChange = this.changeEmitter.event;
   private drainTimer: NodeJS.Timeout | undefined;
   private retryTimer: NodeJS.Timeout | undefined;
+  private consignaTimer: NodeJS.Timeout | undefined;
   private starting = false;
   private evaluation: Promise<void> = Promise.resolve();
   private readonly disposables: vscode.Disposable[] = [];
@@ -453,6 +456,70 @@ export class UatuController implements vscode.Disposable {
     this.lastSession = session;
     this.setView({ kind: 'active', user, examId: m.exam_id, deadlineMs: exam.parsed.deadlineMs, stats: session.stats });
     this.log(`Sesión ${sessionUuid} iniciada para @${user} en ${meta.ref}.`);
+    if (m.consigna) {
+      void this.verificarConsigna(exam, session, 1);
+    }
+  }
+
+  /** Intervalo entre intentos de traer la consigna (la liberación puede demorar unos minutos). */
+  public static readonly CONSIGNA_RETRY_MS = 20_000;
+  public static readonly CONSIGNA_MAX_INTENTOS = 30;
+
+  /**
+   * Trae la consigna liberada (`git pull --ff-only`) y verifica su hash contra
+   * el del manifiesto firmado; registra `consigna_verificada`. Si todavía no
+   * llegó, reintenta (hasta CONSIGNA_MAX_INTENTOS).
+   */
+  private async verificarConsigna(exam: ExamContext, session: AuditSession, intento: number): Promise<void> {
+    const settings = exam.parsed.manifest.consigna;
+    if (!settings || this.active?.session !== session) {
+      return;
+    }
+    const dir = path.join(exam.repoRoot, settings.carpeta);
+    let obtenido = consignaTreeHash(dir);
+    if (obtenido === undefined) {
+      try {
+        // Rama explícita: sin upstream configurado, `git pull <remoto>` se niega a elegirla.
+        const rama = (await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: exam.repoRoot })).trim();
+        await runGit(['pull', '--ff-only', '--quiet', exam.parsed.manifest.git.remote_name, rama], {
+          cwd: exam.repoRoot,
+          timeoutMs: 60_000,
+        });
+      } catch (e) {
+        this.log(`No se pudo traer la consigna (intento ${intento}): ${(e as Error).message}`);
+      }
+      obtenido = consignaTreeHash(dir);
+    }
+    if (obtenido === undefined) {
+      if (intento >= UatuController.CONSIGNA_MAX_INTENTOS) {
+        void vscode.window.showWarningMessage(
+          `Uatu: la consigna todavía no llegó a ${settings.carpeta}/. Hacé git pull o avisale al docente.`
+        );
+        return;
+      }
+      this.consignaTimer = setTimeout(() => void this.verificarConsigna(exam, session, intento + 1), UatuController.CONSIGNA_RETRY_MS);
+      this.consignaTimer.unref?.();
+      return;
+    }
+    const coincide = obtenido === settings.sha256;
+    try {
+      session.record('consigna_verificada', {
+        carpeta: settings.carpeta,
+        sha256_esperado: settings.sha256,
+        sha256_obtenido: obtenido,
+        coincide,
+        intentos: intento,
+      });
+    } catch (e) {
+      this.log(`No se pudo registrar consigna_verificada: ${(e as Error).message}`);
+    }
+    if (coincide) {
+      void vscode.window.showInformationMessage(`Uatu: la consigna está en ${settings.carpeta}/ y es la firmada por la cátedra.`);
+    } else {
+      void vscode.window.showWarningMessage(
+        `Uatu: el contenido de ${settings.carpeta}/ no coincide con la consigna firmada por la cátedra. Avisale al docente.`
+      );
+    }
   }
 
   private async closeActive(reason: string, waitMs: number): Promise<AuditSession | undefined> {
@@ -461,6 +528,10 @@ export class UatuController implements vscode.Disposable {
       return undefined;
     }
     this.active = undefined;
+    if (this.consignaTimer) {
+      clearTimeout(this.consignaTimer);
+      this.consignaTimer = undefined;
+    }
     await active.monitors.stop();
     await active.session.close(reason, {}, waitMs);
     // La sesión ya está cerrada y todos sus eventos firmados: la clave no se necesita más.

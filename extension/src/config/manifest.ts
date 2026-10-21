@@ -62,6 +62,15 @@ export interface GitSettings {
   auto_push: boolean;
 }
 
+/**
+ * Consigna sellada (`uatu-admin consigna sellar`): llega al repositorio en
+ * start_utc y su hash queda bajo la firma docente.
+ */
+export interface ConsignaSettings {
+  carpeta: string;
+  sha256: string;
+}
+
 export interface UatuManifest {
   version: string;
   exam_id: string;
@@ -70,6 +79,7 @@ export interface UatuManifest {
   monitoring: MonitoringSettings;
   crypto: CryptoSettings;
   git: GitSettings;
+  consigna?: ConsignaSettings;
 }
 
 /** Manifiesto validado junto con los valores derivados que usa el motor. */
@@ -237,6 +247,18 @@ export function parseManifest(text: string): ParsedManifest {
     throw new ManifestError('git.remote_name no es un nombre de remoto válido.');
   }
 
+  let consigna: ConsignaSettings | undefined;
+  if (raw.consigna !== undefined) {
+    const k = section(raw, 'consigna', true);
+    consigna = { carpeta: str(k, 'carpeta', 'consigna', 'consigna'), sha256: str(k, 'sha256', 'consigna') };
+    if (!/^[0-9a-f]{64}$/.test(consigna.sha256)) {
+      throw new ManifestError('consigna.sha256 debe ser un SHA-256 en hexadecimal.');
+    }
+    if (!isRefPath(consigna.carpeta)) {
+      throw new ManifestError('consigna.carpeta debe ser una ruta relativa simple (p. ej. "consigna").');
+    }
+  }
+
   let sha256: string;
   try {
     sha256 = sha256Hex(canonicalBytes(raw));
@@ -246,7 +268,7 @@ export function parseManifest(text: string): ParsedManifest {
 
   return {
     raw,
-    manifest: { version, exam_id: examId, session, auth, monitoring, crypto: cryptoSettings, git },
+    manifest: { version, exam_id: examId, session, auth, monitoring, crypto: cryptoSettings, git, ...(consigna ? { consigna } : {}) },
     startMs,
     deadlineMs,
     sha256,

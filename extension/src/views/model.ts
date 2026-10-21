@@ -158,6 +158,7 @@ export const EVENT_STYLES: Record<EventType, EventStyle> = {
   heartbeat: { title: 'Latido', icon: 'pulse', color: 'disabledForeground' },
   clock_skew: { title: 'Desfase de reloj', icon: 'watch', color: 'charts.yellow' },
   config_changed: { title: 'Cambio de .uatu.conf', icon: 'gear', color: 'charts.red' },
+  consigna_verificada: { title: 'Consigna verificada', icon: 'verified', color: 'charts.green' },
   session_end: { title: 'Fin de sesión', icon: 'debug-stop', color: 'charts.blue' },
 };
 
@@ -165,6 +166,9 @@ function styleFor(ev: AuditEvent): EventStyle {
   const base = EVENT_STYLES[ev.event_type] ?? { title: ev.event_type, icon: 'circle' };
   if (ev.event_type === 'disallowed_setting' && ev.data.state === 'resolved') {
     return { title: 'Configuración corregida', icon: 'settings-gear', color: 'charts.green' };
+  }
+  if (ev.event_type === 'consigna_verificada' && ev.data.coincide === false) {
+    return { title: 'Consigna distinta de la firmada', icon: 'unverified', color: 'charts.red' };
   }
   if (ev.event_type === 'window_focus') {
     return ev.data.focused
@@ -201,6 +205,8 @@ export function summarizeEvent(ev: AuditEvent): string {
       return `${Math.round(Number(d.offset_ms ?? 0) / 1000)} s (${d.source})`;
     case 'config_changed':
       return d.deleted ? 'manifiesto eliminado' : d.signature_valid ? 'firma válida' : 'firma inválida';
+    case 'consigna_verificada':
+      return `${d.carpeta}/ · ${d.coincide ? 'coincide' : 'no coincide'}`;
     case 'session_end':
       return String(d.reason ?? '');
     default:

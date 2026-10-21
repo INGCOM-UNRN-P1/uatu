@@ -31,7 +31,7 @@ async function waitFor(cond: () => boolean, timeoutMs = 5000): Promise<void> {
   }
 }
 
-function setupExam(startOffsetMs: number, durationMs: number) {
+function setupExam(startOffsetMs: number, durationMs: number, extra: Record<string, unknown> = {}) {
   const pki = makePki();
   const { repo, remote } = makeRepo();
   const regFile = path.join(tmpDir(), 'keys.json');
@@ -48,6 +48,7 @@ function setupExam(startOffsetMs: number, durationMs: number) {
         heartbeat_interval_seconds: 60,
       },
       auth: { public_key_registry_url: pathToFileURL(regFile).toString(), require_github_auth: true },
+      ...extra,
     }),
     pki.teacherSign
   );
@@ -154,6 +155,40 @@ test('flujo ACTIVO completo: consentimiento, pegado, foco, extensión prohibida 
     assert.ok(report.warnings.some((w: string) => w.includes('github.copilot')));
     assert.ok(report.warnings.some((w: string) => w.includes('static int fib(int n) {')));
   }
+});
+
+test('trae la consigna liberada y verifica que sea la firmada', async () => {
+  // Hash de consigna/a.txt = "hola\n" (el mismo valor fijo que en uatu-tools).
+  const sha256 = '7859017c979648d0896746364a6308bc0a38c80316cb57447475e34bbc4aae85';
+  const exam = setupExam(-60_000, 3_600_000, { consigna: { carpeta: 'consigna', sha256 } });
+  // La liberación (uatu-admin consigna liberar) es un commit en el remoto que el estudiante no tiene.
+  const docente = path.join(tmpDir('uatu-docente-'), 'clone');
+  execFileSync('git', ['clone', '-q', exam.remote, docente]);
+  fs.mkdirSync(path.join(docente, 'consigna'));
+  fs.writeFileSync(path.join(docente, 'consigna', 'a.txt'), 'hola\n');
+  sh(docente, 'add', 'consigna');
+  sh(docente, 'commit', '-q', '-m', 'uatu: liberar consigna (7859017c979)');
+  sh(docente, 'push', '-q', 'origin', 'main');
+  resetState(exam.repo);
+  const { controller } = makeController(exam.pki.anchors);
+  try {
+    await controller.initialize();
+    await waitFor(() => state.messages.some((m) => m.text.includes('es la firmada por la cátedra')), 15_000);
+    assert.equal(fs.readFileSync(path.join(exam.repo, 'consigna', 'a.txt'), 'utf-8'), 'hola\n');
+  } finally {
+    await controller.shutdown();
+    controller.dispose();
+  }
+
+  const ci = path.join(tmpDir('uatu-ci-'), 'clone');
+  execFileSync('git', ['clone', '-q', exam.remote, ci]);
+  sh(ci, 'fetch', '-q', 'origin', '+refs/heads/uatu-audit/*:refs/remotes/origin/uatu-audit/*');
+  const ref = sh(ci, 'for-each-ref', '--format=%(refname)', 'refs/remotes/origin/uatu-audit/');
+  const evs = sh(ci, 'ls-tree', '-r', '--name-only', ref).split('\n').flatMap((f) => JSON.parse(sh(ci, 'show', `${ref}:${f}`)).events);
+  const verificada = evs.find((e: { event_type: string }) => e.event_type === 'consigna_verificada');
+  assert.ok(verificada, 'se registra consigna_verificada');
+  assert.equal(verificada.data.coincide, true);
+  assert.equal(verificada.data.sha256_obtenido, sha256);
 });
 
 test('STANDBY hasta start_utc, activación automática y CONCLUIDO al deadline', async () => {
