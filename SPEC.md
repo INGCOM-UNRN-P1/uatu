@@ -142,9 +142,16 @@ La activación del motor de supervisión de **uatu** está sujeta a dos condicio
     "telemetry_branch_prefix": "uatu-audit",
     "remote_name": "origin",
     "auto_push": true
+  },
+  "environment": {
+    "required_tools": ["gcc", "make"]
   }
 }
 ```
+
+`environment` es opcional: son los comandos que **Uatu: Verificar el entorno antes del examen**
+(check-env) busca en el `PATH` del estudiante; sin la sección, `gcc` y `make`. Como el resto del
+manifiesto, queda bajo la firma docente.
 
 ### 3.3. Resolución de Llaves Docentes y Verificación de Integridad
 

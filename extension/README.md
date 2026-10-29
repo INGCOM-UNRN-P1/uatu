@@ -53,6 +53,9 @@ abre dos vistas:
 
 - **Uatu: Abrir panel de monitoreo**
 - **Uatu: Mostrar estado de la sesión**
+- **Uatu: Verificar el entorno antes del examen** (check-env): manifiesto y firma, horario y reloj,
+  extensiones y configuración prohibidas, Git y las herramientas del examen. Local: no inicia la
+  sesión ni envía datos.
 - **Uatu: Iniciar / reintentar sesión de examen**
 - **Uatu: Sincronizar telemetría ahora**
 - **Uatu: Mostrar registro**

@@ -168,6 +168,23 @@ aceptarlo más tarde: paleta de comandos → **Uatu: Iniciar / reintentar sesió
 de examen**.
 ````
 
+### 4.1.1 Verificar el entorno antes del examen (check-env)
+
+Paleta de comandos → **Uatu: Verificar el entorno antes del examen**, en cualquier momento
+antes de `start_utc` (también durante el examen). Revisa, sin iniciar la sesión ni registrar ni
+enviar nada:
+
+- que la carpeta abierta tenga `.uatu.conf` y que su firma docente sea válida;
+- el horario del examen y el reloj del equipo (contra la hora del servidor);
+- las extensiones y la configuración del editor según la política del examen (lo que durante la
+  sesión quedaría registrado como `disallowed_extension` o `disallowed_setting`);
+- que el workspace sea de confianza y Git esté listo para publicar la telemetría (repositorio,
+  remoto e identidad);
+- las herramientas que pide el examen (`environment.required_tools`; por omisión `gcc` y `make`).
+
+Cada problema viene con qué hacer para resolverlo, en el canal de salida **Uatu**. El único
+acceso a la red es el que ya hace la extensión: leer el registro público de claves docentes.
+
 ### 4.2 Qué se registra y qué no
 
 | Se registra | No se registra |

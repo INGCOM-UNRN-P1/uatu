@@ -23,6 +23,10 @@
         "title": "Uatu: Mostrar estado de la sesión"
       },
       {
+        "command": "uatu.checkEnv",
+        "title": "Uatu: Verificar el entorno antes del examen"
+      },
+      {
         "command": "uatu.startSession",
         "title": "Uatu: Iniciar / reintentar sesión de examen"
       },

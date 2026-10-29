@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
+import { formatReport, overallStatus } from './checks/checkEnv';
 import { parseTrustAnchors, TrustAnchor } from './config/registry';
 import { UatuController } from './vscode/controller';
 import { SecretKeyVault } from './vscode/secretVault';
@@ -44,7 +45,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('uatu.startSession', () => c.retry()),
     vscode.commands.registerCommand('uatu.flushNow', () => c.flushNow()),
-    vscode.commands.registerCommand('uatu.showLog', () => output.show())
+    vscode.commands.registerCommand('uatu.showLog', () => output.show()),
+    vscode.commands.registerCommand('uatu.checkEnv', async () => {
+      const checks = await c.checkEnvironment();
+      output.appendLine(formatReport(checks));
+      const estado = overallStatus(checks);
+      const problemas = checks.filter((x) => x.status === 'fail').length;
+      const mensaje =
+        estado === 'ok' ? 'Uatu: el entorno está listo para el examen.'
+          : estado === 'warn' ? 'Uatu: el entorno se puede usar, con avisos.'
+            : `Uatu: hay ${problemas} problema(s) que resolver antes del examen.`;
+      const mostrar = estado === 'fail' ? vscode.window.showErrorMessage : estado === 'warn'
+        ? vscode.window.showWarningMessage : vscode.window.showInformationMessage;
+      if ((await mostrar(mensaje, 'Ver detalle')) === 'Ver detalle') {
+        output.show();
+      }
+    })
   );
   await c.initialize();
 }

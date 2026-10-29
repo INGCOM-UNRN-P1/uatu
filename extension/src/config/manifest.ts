@@ -71,6 +71,16 @@ export interface ConsignaSettings {
   sha256: string;
 }
 
+/**
+ * Requisitos del equipo que controla `Uatu: verificar el entorno` antes del examen
+ * (check-env): comandos que tienen que estar en el PATH. Sin la sección, gcc y make.
+ */
+export interface EnvironmentSettings {
+  required_tools: string[];
+}
+
+export const DEFAULT_REQUIRED_TOOLS = ['gcc', 'make'];
+
 export interface UatuManifest {
   version: string;
   exam_id: string;
@@ -80,6 +90,7 @@ export interface UatuManifest {
   crypto: CryptoSettings;
   git: GitSettings;
   consigna?: ConsignaSettings;
+  environment: EnvironmentSettings;
 }
 
 /** Manifiesto validado junto con los valores derivados que usa el motor. */
@@ -259,6 +270,13 @@ export function parseManifest(text: string): ParsedManifest {
     }
   }
 
+  const e = section(raw, 'environment', false);
+  const tools = e.required_tools ?? DEFAULT_REQUIRED_TOOLS;
+  if (!Array.isArray(tools) || !tools.every((x) => typeof x === 'string' && /^[A-Za-z0-9_.+-]+$/.test(x))) {
+    throw new ManifestError('environment.required_tools debe ser una lista de nombres de comando (p. ej. ["gcc", "make"]).');
+  }
+  const environment: EnvironmentSettings = { required_tools: tools as string[] };
+
   let sha256: string;
   try {
     sha256 = sha256Hex(canonicalBytes(raw));
@@ -268,7 +286,7 @@ export function parseManifest(text: string): ParsedManifest {
 
   return {
     raw,
-    manifest: { version, exam_id: examId, session, auth, monitoring, crypto: cryptoSettings, git, ...(consigna ? { consigna } : {}) },
+    manifest: { version, exam_id: examId, session, auth, monitoring, crypto: cryptoSettings, git, ...(consigna ? { consigna } : {}), environment },
     startMs,
     deadlineMs,
     sha256,

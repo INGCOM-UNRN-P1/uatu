@@ -1,3 +1,4 @@
+import { execFile } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -14,6 +15,7 @@ import { RegistryResolver, resolveTeacher, TeacherCertificate, TrustAnchor } fro
 import { formatHourMinuteUtc, isoUtc, systemClock } from '../core/time';
 import { UatuCryptoEngine } from '../crypto/cryptoEngine';
 import { consignaTreeHash } from '../core/consigna';
+import { checkEnvironment, EnvCheck, SignatureState, ToolState } from '../checks/checkEnv';
 import { GitPlumbing } from '../git/gitPlumbing';
 import { runGit } from '../git/gitRunner';
 import { AuditSession } from '../session/auditSession';
@@ -317,6 +319,95 @@ export class UatuController implements vscode.Disposable {
         void this.concludeSession(previous === 'ACTIVE');
         break;
     }
+  }
+
+  // ---------------------------------------------------------------- check-env
+
+  /**
+   * Verificación local del entorno (check-env): no inicia la sesión, no registra
+   * eventos y no envía datos. Reusa la evaluación del manifiesto si ya está hecha.
+   */
+  public async checkEnvironment(): Promise<EnvCheck[]> {
+    await this.evaluation;
+    const found = this.findManifest();
+    let manifest: ParsedManifest | undefined;
+    let manifestError: string | undefined;
+    if (found) {
+      try {
+        manifest = parseManifest(fs.readFileSync(found.manifestPath, 'utf-8'));
+      } catch (e) {
+        manifestError = e instanceof ManifestError ? e.message : `No se pudo leer .uatu.conf: ${(e as Error).message}`;
+      }
+    }
+
+    let signature: SignatureState | undefined;
+    if (manifest) {
+      if (this.exam && this.exam.parsed.sha256 === manifest.sha256) {
+        signature = { kind: 'valid' };
+      } else if (this.deps.anchors.length === 0) {
+        signature = { kind: 'unverified', reason: 'la extensión no tiene anclas raíz institucionales.' };
+      } else {
+        try {
+          const resolution = await this.resolver.resolve(manifest.manifest.auth.public_key_registry_url);
+          const teacher = resolveTeacher(resolution.registry, manifest.manifest.crypto.teacher_key_id, this.clock.now());
+          signature = verifyManifestSignature(manifest, teacher.verifyKeyHex) ? { kind: 'valid' } : { kind: 'invalid' };
+        } catch (e) {
+          signature = { kind: 'unverified', reason: (e as Error).message };
+        }
+      }
+    }
+
+    const cwd = found?.folder.uri.fsPath ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const git = await this.gitState(cwd, manifest?.manifest.git.remote_name ?? 'origin');
+    const tools = await Promise.all(
+      (manifest?.manifest.environment.required_tools ?? []).map((name) => probarHerramienta(name))
+    );
+    const config = vscode.workspace.getConfiguration();
+    return checkEnvironment({
+      manifest,
+      manifestError,
+      signature,
+      nowMs: this.clock.now(),
+      clockOffsetMs: this.clock.origin === 'http-date' ? this.clockObservedOffsetMs : undefined,
+      extensions: vscode.extensions.all.map((x) => ({
+        id: x.id,
+        version: String((x.packageJSON as { version?: string })?.version ?? ''),
+        isActive: x.isActive,
+        builtin: (x.packageJSON as { isBuiltin?: boolean })?.isBuiltin === true,
+      })),
+      ownExtensionId: this.deps.context.extension.id,
+      readSetting: (key) => config.get(key),
+      workspaceTrusted: vscode.workspace.isTrusted,
+      git,
+      tools,
+    });
+  }
+
+  private async gitState(cwd: string | undefined, remote: string) {
+    let version: string;
+    try {
+      version = (await runGit(['--version'], { cwd: cwd ?? process.cwd(), timeoutMs: 5000 })).trim();
+    } catch {
+      return { available: false };
+    }
+    const repoRoot = cwd ? await GitPlumbing.topLevel(cwd) : undefined;
+    if (!repoRoot) {
+      return { available: true, version };
+    }
+    const leer = async (args: string[]) => {
+      try {
+        return (await runGit(args, { cwd: repoRoot, timeoutMs: 5000 })).trim() || undefined;
+      } catch {
+        return undefined;
+      }
+    };
+    return {
+      available: true,
+      version,
+      repoRoot,
+      remoteUrl: await leer(['remote', 'get-url', remote]),
+      userName: await leer(['config', 'user.name']),
+    };
   }
 
   // ---------------------------------------------------------------- sesión activa
@@ -741,4 +832,19 @@ export class UatuController implements vscode.Disposable {
     }
     this.disposables.forEach((d) => d.dispose());
   }
+}
+
+/** ¿Está `nombre` en el PATH? Se ejecuta `nombre --version` (sin shell); un código distinto de 0 igual cuenta como instalada. */
+function probarHerramienta(nombre: string): Promise<ToolState> {
+  return new Promise((resolve) => {
+    execFile(nombre, ['--version'], { timeout: 5000, windowsHide: true }, (error, stdout) => {
+      const noEsta = error && ((error as NodeJS.ErrnoException).code === 'ENOENT' || error.killed);
+      if (noEsta) {
+        resolve({ name: nombre, found: false });
+        return;
+      }
+      const primera = String(stdout).split(/\r?\n/)[0]?.trim();
+      resolve(primera ? { name: nombre, found: true, version: primera } : { name: nombre, found: true });
+    });
+  });
 }
