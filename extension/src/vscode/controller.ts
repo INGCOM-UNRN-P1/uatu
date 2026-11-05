@@ -15,6 +15,7 @@ import { RegistryResolver, resolveTeacher, TeacherCertificate, TrustAnchor } fro
 import { formatHourMinuteUtc, isoUtc, systemClock } from '../core/time';
 import { UatuCryptoEngine } from '../crypto/cryptoEngine';
 import { consignaTreeHash } from '../core/consigna';
+import { abrirPaquete, textoRechazo } from '../core/paquete';
 import { checkEnvironment, EnvCheck, SignatureState, ToolState } from '../checks/checkEnv';
 import { GitPlumbing } from '../git/gitPlumbing';
 import { runGit } from '../git/gitRunner';
@@ -550,6 +551,9 @@ export class UatuController implements vscode.Disposable {
     if (m.consigna) {
       void this.verificarConsigna(exam, session, 1);
     }
+    if (m.paquetes) {
+      void this.abrirPaqueteDelExamen(exam, session, user, 1);
+    }
   }
 
   /** Intervalo entre intentos de traer la consigna (la liberación puede demorar unos minutos). */
@@ -569,16 +573,7 @@ export class UatuController implements vscode.Disposable {
     const dir = path.join(exam.repoRoot, settings.carpeta);
     let obtenido = consignaTreeHash(dir);
     if (obtenido === undefined) {
-      try {
-        // Rama explícita: sin upstream configurado, `git pull <remoto>` se niega a elegirla.
-        const rama = (await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: exam.repoRoot })).trim();
-        await runGit(['pull', '--ff-only', '--quiet', exam.parsed.manifest.git.remote_name, rama], {
-          cwd: exam.repoRoot,
-          timeoutMs: 60_000,
-        });
-      } catch (e) {
-        this.log(`No se pudo traer la consigna (intento ${intento}): ${(e as Error).message}`);
-      }
+      await this.traerDelRemoto(exam, 'la consigna', intento);
       obtenido = consignaTreeHash(dir);
     }
     if (obtenido === undefined) {
@@ -610,6 +605,87 @@ export class UatuController implements vscode.Disposable {
       void vscode.window.showWarningMessage(
         `Uatu: el contenido de ${settings.carpeta}/ no coincide con la consigna firmada por la cátedra. Avisale al docente.`
       );
+    }
+  }
+
+  private async traerDelRemoto(exam: ExamContext, que: string, intento: number): Promise<void> {
+    try {
+      // Rama explícita: sin upstream configurado, `git pull <remoto>` se niega a elegirla.
+      const rama = (await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: exam.repoRoot })).trim();
+      await runGit(['pull', '--ff-only', '--quiet', exam.parsed.manifest.git.remote_name, rama], {
+        cwd: exam.repoRoot,
+        timeoutMs: 60_000,
+      });
+    } catch (e) {
+      this.log(`No se pudo traer ${que} (intento ${intento}): ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Trae la clave del paquete (`git pull --ff-only`) y descifra el examen del
+   * estudiante; registra `paquete_abierto` o `paquete_rechazado`. Si la clave
+   * todavía no llegó, reintenta (hasta CONSIGNA_MAX_INTENTOS).
+   */
+  private async abrirPaqueteDelExamen(exam: ExamContext, session: AuditSession, user: string, intento: number): Promise<void> {
+    const settings = exam.parsed.manifest.paquetes;
+    if (!settings || this.active?.session !== session) {
+      return;
+    }
+    await this.traerDelRemoto(exam, 'el examen', intento);
+    if (this.active?.session !== session) {
+      return;
+    }
+    const relojCalibrado = this.clock.origin === 'http-date';
+    const abrir = () =>
+      abrirPaquete({
+        repoRoot: exam.repoRoot,
+        settings,
+        usuario: user,
+        nowMs: this.clock.now(),
+        startMs: exam.parsed.startMs,
+        deadlineMs: exam.parsed.deadlineMs,
+        relojCalibrado,
+      });
+    let resultado;
+    try {
+      resultado = abrir();
+    } catch (e) {
+      this.log(`No se pudo abrir el examen: ${(e as Error).message}`);
+      void vscode.window.showErrorMessage(`Uatu: no se pudo escribir el examen en ${settings.carpeta}/. Avisale al docente.`);
+      return;
+    }
+    if (resultado.estado === 'pendiente') {
+      if (intento >= UatuController.CONSIGNA_MAX_INTENTOS) {
+        void vscode.window.showWarningMessage('Uatu: tu examen todavía no llegó. Hacé git pull o avisale al docente.');
+        return;
+      }
+      this.consignaTimer = setTimeout(
+        () => void this.abrirPaqueteDelExamen(exam, session, user, intento + 1),
+        UatuController.CONSIGNA_RETRY_MS
+      );
+      this.consignaTimer.unref?.();
+      return;
+    }
+    const comun = { usuario: user, clock_source: this.clock.origin, clock_offset_ms: this.clockObservedOffsetMs, intentos: intento };
+    try {
+      if (resultado.estado === 'abierto') {
+        session.record('paquete_abierto', {
+          ...comun,
+          carpeta: settings.carpeta,
+          sha256: resultado.sha256,
+          escritos: resultado.escritos.length,
+          conservados: resultado.conservados.length,
+        });
+      } else {
+        session.record('paquete_rechazado', { ...comun, motivo: resultado.motivo });
+      }
+    } catch (e) {
+      this.log(`No se pudo registrar la apertura del examen: ${(e as Error).message}`);
+    }
+    if (resultado.estado === 'abierto') {
+      void vscode.window.showInformationMessage(`Uatu: tu examen está en ${settings.carpeta}/.`);
+    } else {
+      void vscode.window.showErrorMessage(`Uatu: no se abrió el examen: ${textoRechazo(resultado.motivo)} Avisale al docente.`);
     }
   }
 

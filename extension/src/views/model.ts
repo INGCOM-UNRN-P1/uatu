@@ -159,6 +159,8 @@ export const EVENT_STYLES: Record<EventType, EventStyle> = {
   clock_skew: { title: 'Desfase de reloj', icon: 'watch', color: 'charts.yellow' },
   config_changed: { title: 'Cambio de .uatu.conf', icon: 'gear', color: 'charts.red' },
   consigna_verificada: { title: 'Consigna verificada', icon: 'verified', color: 'charts.green' },
+  paquete_abierto: { title: 'Examen descifrado', icon: 'unlock', color: 'charts.green' },
+  paquete_rechazado: { title: 'Examen no descifrado', icon: 'lock', color: 'charts.red' },
   session_end: { title: 'Fin de sesión', icon: 'debug-stop', color: 'charts.blue' },
 };
 
@@ -207,6 +209,10 @@ export function summarizeEvent(ev: AuditEvent): string {
       return d.deleted ? 'manifiesto eliminado' : d.signature_valid ? 'firma válida' : 'firma inválida';
     case 'consigna_verificada':
       return `${d.carpeta}/ · ${d.coincide ? 'coincide' : 'no coincide'}`;
+    case 'paquete_abierto':
+      return `${d.carpeta}/ · ${d.clock_source}`;
+    case 'paquete_rechazado':
+      return String(d.motivo ?? '');
     case 'session_end':
       return String(d.reason ?? '');
     default:

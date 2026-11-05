@@ -21,6 +21,10 @@ export type EventType =
   | 'config_changed'
   /** Hash de la consigna liberada comparado con el del manifiesto firmado. */
   | 'consigna_verificada'
+  /** El paquete del estudiante se descifró (Ola 47). */
+  | 'paquete_abierto'
+  /** Llegó la clave, pero no se descifró: identidad, hora o contenido. */
+  | 'paquete_rechazado'
   | 'session_end';
 
 /** Eventos que fuerzan un volcado inmediato del lote (sección 4, RF-03). */
@@ -30,6 +34,8 @@ export const PRIORITY_EVENTS: ReadonlySet<EventType> = new Set<EventType>([
   'disallowed_setting',
   'clock_skew',
   'config_changed',
+  'paquete_abierto',
+  'paquete_rechazado',
   'session_end',
 ]);
 

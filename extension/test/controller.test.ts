@@ -191,6 +191,67 @@ test('trae la consigna liberada y verifica que sea la firmada', async () => {
   assert.equal(verificada.data.sha256_obtenido, sha256);
 });
 
+/** Sube el paquete y la clave al remoto, como `uatu-admin paquetes liberar`. Vector de uatu-tools. */
+function examenConPaquete() {
+  const sha256 = 'b322f83db9bc4fe55775563853be533090479402006f12872400c42e14e5e866';
+  const exam = setupExam(-60_000, 3_600_000, { paquetes: { carpeta: 'consigna', hashes: { ana: sha256 } } });
+  const docente = path.join(tmpDir('uatu-docente-'), 'clone');
+  execFileSync('git', ['clone', '-q', exam.remote, docente]);
+  fs.writeFileSync(
+    path.join(docente, '.uatu-paquete.enc'),
+    JSON.stringify({ formato: 'uatu-paquete-v1', usuario: 'ana', sha256, nonce: 'AAECAwQFBgcICQoL', datos: 'PCC3NbGdtjm3YbXq9tALNNK5uhaNAAt/59YO53QptUdUX3hf4g==' })
+  );
+  fs.writeFileSync(path.join(docente, '.uatu-paquete.clave'), `${Buffer.from([...Array(32).keys()]).toString('base64')}\n`);
+  sh(docente, 'add', '.uatu-paquete.enc', '.uatu-paquete.clave');
+  sh(docente, 'commit', '-q', '-m', 'uatu: liberar clave del paquete (b322f83db9bc)');
+  sh(docente, 'push', '-q', 'origin', 'main');
+  return exam;
+}
+
+function eventosDelRemoto(remote: string): Array<{ event_type: string; data: Record<string, unknown> }> {
+  const ci = path.join(tmpDir('uatu-ci-'), 'clone');
+  execFileSync('git', ['clone', '-q', remote, ci]);
+  sh(ci, 'fetch', '-q', 'origin', '+refs/heads/uatu-audit/*:refs/remotes/origin/uatu-audit/*');
+  const ref = sh(ci, 'for-each-ref', '--format=%(refname)', 'refs/remotes/origin/uatu-audit/');
+  return sh(ci, 'ls-tree', '-r', '--name-only', ref).split('\n').flatMap((f) => JSON.parse(sh(ci, 'show', `${ref}:${f}`)).events);
+}
+
+test('trae la clave y descifra el examen del estudiante', async () => {
+  const exam = examenConPaquete();
+  resetState(exam.repo);
+  state.githubLogin = 'Ana';
+  const { controller } = makeController(exam.pki.anchors);
+  try {
+    await controller.initialize();
+    await waitFor(() => state.messages.some((m) => m.text.includes('tu examen está en consigna/')), 15_000);
+    assert.equal(fs.readFileSync(path.join(exam.repo, 'consigna', 'a.txt'), 'utf-8'), 'hola\n');
+  } finally {
+    state.githubLogin = 'octocat';
+    await controller.shutdown();
+    controller.dispose();
+  }
+  const abierto = eventosDelRemoto(exam.remote).find((e) => e.event_type === 'paquete_abierto');
+  assert.ok(abierto, 'se registra paquete_abierto');
+  assert.equal(abierto.data.usuario, 'Ana');
+  assert.equal(abierto.data.carpeta, 'consigna');
+});
+
+test('otro usuario de GitHub no abre el examen y queda registrado', async () => {
+  const exam = examenConPaquete();
+  resetState(exam.repo);
+  const { controller } = makeController(exam.pki.anchors);
+  try {
+    await controller.initialize();
+    await waitFor(() => state.messages.some((m) => m.text.includes('no se abrió el examen')), 15_000);
+    assert.equal(fs.existsSync(path.join(exam.repo, 'consigna')), false);
+  } finally {
+    await controller.shutdown();
+    controller.dispose();
+  }
+  const rechazado = eventosDelRemoto(exam.remote).find((e) => e.event_type === 'paquete_rechazado');
+  assert.equal(rechazado?.data.motivo, 'usuario_sin_paquete');
+});
+
 test('STANDBY hasta start_utc, activación automática y CONCLUIDO al deadline', async () => {
   const exam = setupExam(1_500, 2_000);
   resetState(exam.repo);

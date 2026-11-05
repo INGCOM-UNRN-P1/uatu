@@ -72,6 +72,15 @@ export interface ConsignaSettings {
 }
 
 /**
+ * Paquetes por estudiante (`uatu-admin paquetes sellar`): el hash de cada uno,
+ * por usuario de GitHub en minúsculas, queda bajo la firma docente.
+ */
+export interface PaquetesSettings {
+  carpeta: string;
+  hashes: Record<string, string>;
+}
+
+/**
  * Requisitos del equipo que controla `Uatu: verificar el entorno` antes del examen
  * (check-env): comandos que tienen que estar en el PATH. Sin la sección, gcc y make.
  */
@@ -90,6 +99,7 @@ export interface UatuManifest {
   crypto: CryptoSettings;
   git: GitSettings;
   consigna?: ConsignaSettings;
+  paquetes?: PaquetesSettings;
   environment: EnvironmentSettings;
 }
 
@@ -270,6 +280,27 @@ export function parseManifest(text: string): ParsedManifest {
     }
   }
 
+  let paquetes: PaquetesSettings | undefined;
+  if (raw.paquetes !== undefined) {
+    if (consigna) {
+      throw new ManifestError('Un examen usa consigna o paquetes, no los dos.');
+    }
+    const k = section(raw, 'paquetes', true);
+    const hashes = k.hashes;
+    if (typeof hashes !== 'object' || hashes === null || Array.isArray(hashes) || Object.keys(hashes).length === 0) {
+      throw new ManifestError('paquetes.hashes debe tener un hash por usuario de GitHub.');
+    }
+    for (const [usuario, hash] of Object.entries(hashes)) {
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(usuario) || typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) {
+        throw new ManifestError(`paquetes.hashes no es válido para "${usuario}": usuario en minúsculas y SHA-256 en hexadecimal.`);
+      }
+    }
+    paquetes = { carpeta: str(k, 'carpeta', 'paquetes', 'consigna'), hashes: hashes as Record<string, string> };
+    if (!isRefPath(paquetes.carpeta)) {
+      throw new ManifestError('paquetes.carpeta debe ser una ruta relativa simple (p. ej. "consigna").');
+    }
+  }
+
   const e = section(raw, 'environment', false);
   const tools = e.required_tools ?? DEFAULT_REQUIRED_TOOLS;
   if (!Array.isArray(tools) || !tools.every((x) => typeof x === 'string' && /^[A-Za-z0-9_.+-]+$/.test(x))) {
@@ -286,7 +317,7 @@ export function parseManifest(text: string): ParsedManifest {
 
   return {
     raw,
-    manifest: { version, exam_id: examId, session, auth, monitoring, crypto: cryptoSettings, git, ...(consigna ? { consigna } : {}), environment },
+    manifest: { version, exam_id: examId, session, auth, monitoring, crypto: cryptoSettings, git, ...(consigna ? { consigna } : {}), ...(paquetes ? { paquetes } : {}), environment },
     startMs,
     deadlineMs,
     sha256,
